@@ -1,0 +1,64 @@
+plugins {
+    id 'java-gradle-plugin'
+    id 'maven-publish'
+}
+
+group = 'se.alipsa'
+version = '1.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+repositories {
+    mavenCentral()
+}
+
+// Add a source set for functional tests before gradlePlugin block references it
+sourceSets {
+    functionalTest {
+        java.srcDir 'src/functionalTest/java'
+        resources.srcDir 'src/functionalTest/resources'
+        compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
+        runtimeClasspath += output + compileClasspath
+    }
+}
+
+configurations {
+    functionalTestImplementation.extendsFrom testImplementation
+    functionalTestRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+gradlePlugin {
+    plugins {
+        mavenModule {
+            id = 'se.alipsa.maven-module'
+            implementationClass = 'se.alipsa.gradle.mavenmodule.MavenModulePlugin'
+        }
+    }
+    testSourceSets sourceSets.functionalTest
+}
+
+// Register a functional test task
+def functionalTest = tasks.register('functionalTest', Test) {
+    description = 'Runs the functional tests.'
+    group = 'verification'
+    testClassesDirs = sourceSets.functionalTest.output.classesDirs
+    classpath = sourceSets.functionalTest.runtimeClasspath
+    useJUnitPlatform()
+    mustRunAfter tasks.named('test')
+}
+
+tasks.named('check') {
+    dependsOn functionalTest
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
