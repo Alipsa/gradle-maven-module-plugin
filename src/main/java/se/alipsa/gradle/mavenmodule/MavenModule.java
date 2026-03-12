@@ -106,7 +106,7 @@ public class MavenModule {
     }
 
     /**
-     * Working directory for the Maven execution. Defaults to the project directory.
+     * Working directory for the Maven execution. Defaults to the POM file's parent directory.
      * @return the working directory property
      */
     public Property<File> getWorkingDir() {

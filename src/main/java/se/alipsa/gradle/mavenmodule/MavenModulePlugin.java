@@ -42,15 +42,11 @@ public class MavenModulePlugin implements Plugin<Project> {
         );
         project.getExtensions().add("mavenModules", modules);
 
-        // Register publishing lifecycle tasks
-        project.getTasks().register("publishToMavenLocal", task -> {
-            task.setDescription("Publishes Maven modules to the local Maven repository");
-            task.setGroup("publishing");
-        });
-        project.getTasks().register("publish", task -> {
-            task.setDescription("Publishes Maven modules using Maven deploy");
-            task.setGroup("publishing");
-        });
+        // Register or reuse publishing lifecycle tasks (may already exist from maven-publish)
+        findOrRegisterTask(project, "publishToMavenLocal",
+            "Publishes Maven modules to the local Maven repository", "publishing");
+        findOrRegisterTask(project, "publish",
+            "Publishes Maven modules using Maven deploy", "publishing");
 
         // Register tasks as modules are added to the container
         modules.all(module -> {
@@ -220,6 +216,17 @@ public class MavenModulePlugin implements Plugin<Project> {
             }
         }
         return null;
+    }
+
+    private static void findOrRegisterTask(Project project, String name,
+                                               String description, String group) {
+        if (project.getTasks().getNames().contains(name)) {
+            return;
+        }
+        project.getTasks().register(name, task -> {
+            task.setDescription(description);
+            task.setGroup(group);
+        });
     }
 
     private static String capitalize(String s) {

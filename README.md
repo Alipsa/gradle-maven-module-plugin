@@ -72,8 +72,8 @@ mavenModules {
         // Additional CLI arguments
         args = ['--batch-mode', '-X']
 
-        // Working directory (defaults to project.projectDir)
-        workingDir = project.projectDir
+        // Working directory (defaults to the POM file's parent directory)
+        workingDir = file('myMavenProject')
 
         // Environment variables for the Maven process
         environment = ['JAVA_HOME': '/usr/lib/jvm/java-17']

@@ -29,11 +29,11 @@ public abstract class MavenExecTask extends DefaultTask {
     protected abstract ExecOperations getExecOperations();
 
     /**
-     * The POM file to use. If set, {@code -f} is passed to Maven.
+     * The POM file to use. When it differs from the default {@code pom.xml}
+     * in the working directory, {@code -f} is passed to Maven.
      * @return the pom file property
      */
-    @Input
-    @Optional
+    @Internal
     public abstract Property<File> getPomFile();
 
     /**
@@ -144,9 +144,13 @@ public abstract class MavenExecTask extends DefaultTask {
         List<String> cmd = new ArrayList<>();
         cmd.add(executable);
 
-        if (getPomFile().isPresent() && !getPomFile().get().getName().equals("pom.xml")) {
-            cmd.add("-f");
-            cmd.add(getPomFile().get().getAbsolutePath());
+        if (getPomFile().isPresent()) {
+            File pomFile = getPomFile().get();
+            File defaultPom = new File(getWorkingDir().get(), "pom.xml");
+            if (!pomFile.getAbsoluteFile().equals(defaultPom.getAbsoluteFile())) {
+                cmd.add("-f");
+                cmd.add(pomFile.getAbsolutePath());
+            }
         }
 
         cmd.add(getPhase().get());
