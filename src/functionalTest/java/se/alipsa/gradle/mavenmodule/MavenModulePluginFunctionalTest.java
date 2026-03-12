@@ -239,6 +239,45 @@ class MavenModulePluginFunctionalTest {
         assertTrue(bomPos < appPos, "bom install should run before app install");
     }
 
+    @Test
+    void pomMetadataIsAppliedToProject() throws IOException {
+        writeFile("pom.xml", """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <project xmlns="http://maven.apache.org/POM/4.0.0">
+                    <modelVersion>4.0.0</modelVersion>
+                    <groupId>com.example</groupId>
+                    <artifactId>test-maven-module</artifactId>
+                    <version>2.5.0</version>
+                    <packaging>jar</packaging>
+                    <description>A test module description</description>
+                </project>
+                """);
+
+        writeFile("build.gradle", """
+                plugins {
+                    id 'se.alipsa.gradle.maven-module'
+                }
+                mavenModules {
+                    app {}
+                }
+                task showMetadata {
+                    doLast {
+                        println "PROJECT_GROUP=${project.group}"
+                        println "PROJECT_VERSION=${project.version}"
+                        println "PROJECT_DESCRIPTION=${project.description}"
+                    }
+                }
+                """);
+
+        BuildResult result = createRunner("showMetadata")
+                .build();
+
+        String output = result.getOutput();
+        assertTrue(output.contains("PROJECT_GROUP=com.example"));
+        assertTrue(output.contains("PROJECT_VERSION=2.5.0"));
+        assertTrue(output.contains("PROJECT_DESCRIPTION=A test module description"));
+    }
+
     private GradleRunner createRunner(String... arguments) {
         GradleRunner runner = GradleRunner.create()
                 .withProjectDir(projectDir)

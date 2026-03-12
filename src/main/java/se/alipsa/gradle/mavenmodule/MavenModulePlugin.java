@@ -60,6 +60,7 @@ public class MavenModulePlugin implements Plugin<Project> {
             findOrRegisterTask(p, "publish",
                 "Publishes Maven modules using Maven deploy", "publishing");
 
+            boolean metadataApplied = false;
             for (MavenModule module : modules) {
                 // Wire module install/deploy tasks to publishing lifecycle tasks
                 String cap = capitalize(module.getName());
@@ -70,6 +71,11 @@ public class MavenModulePlugin implements Plugin<Project> {
 
                 PomInfo pomInfo = parsePom(p, module.getPomFile().get());
                 if (pomInfo != null) {
+                    // Apply POM metadata to the Gradle project from the first module
+                    if (!metadataApplied) {
+                        applyPomMetadata(p, pomInfo);
+                        metadataApplied = true;
+                    }
                     setupArtifactIntegration(p, module, pomInfo);
                 }
             }
@@ -141,6 +147,18 @@ public class MavenModulePlugin implements Plugin<Project> {
                     });
                 }
             }
+        }
+    }
+
+    private void applyPomMetadata(Project project, PomInfo pomInfo) {
+        if (pomInfo.groupId != null && project.getGroup().toString().isEmpty()) {
+            project.setGroup(pomInfo.groupId);
+        }
+        if (pomInfo.version != null && Project.DEFAULT_VERSION.equals(project.getVersion())) {
+            project.setVersion(pomInfo.version);
+        }
+        if (pomInfo.description != null && project.getDescription() == null) {
+            project.setDescription(pomInfo.description);
         }
     }
 

@@ -33,7 +33,8 @@ public abstract class MavenExecTask extends DefaultTask {
      * in the working directory, {@code -f} is passed to Maven.
      * @return the pom file property
      */
-    @Internal
+    @Input
+    @Optional
     public abstract Property<File> getPomFile();
 
     /**
