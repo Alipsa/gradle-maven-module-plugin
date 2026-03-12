@@ -6,12 +6,17 @@ plugins {
 group = project.property('group')
 version = project.property('version')
 description = 'Allows a Maven project (with a pom.xml) to participate in a Gradle multi-project build'
-ext.set('pluginDisplayName', 'Maven Module Plugin')
+ext.pluginDisplayName = 'Maven Module Plugin'
+ext.javaVersion = 17
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
+        languageVersion = JavaLanguageVersion.of(project.ext.javaVersion)
     }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release.set(project.ext.javaVersion)
 }
 
 repositories {
