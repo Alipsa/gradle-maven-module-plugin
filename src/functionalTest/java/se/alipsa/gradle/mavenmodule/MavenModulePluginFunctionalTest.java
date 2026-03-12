@@ -21,19 +21,19 @@ class MavenModulePluginFunctionalTest {
 
     @BeforeEach
     void setUp() throws IOException {
-        // Create build.gradle applying the plugin
         writeFile("build.gradle", """
                 plugins {
                     id 'se.alipsa.gradle.maven-module'
                 }
+                mavenModules {
+                    app {}
+                }
                 """);
 
-        // Create settings.gradle
         writeFile("settings.gradle", """
                 rootProject.name = 'test-maven-module'
                 """);
 
-        // Create pom.xml for a simple Maven project
         writeFile("pom.xml", """
                 <?xml version="1.0" encoding="UTF-8"?>
                 <project xmlns="http://maven.apache.org/POM/4.0.0"
@@ -47,7 +47,6 @@ class MavenModulePluginFunctionalTest {
                 </project>
                 """);
 
-        // Create a simple Java source file for Maven to compile
         Path srcDir = projectDir.toPath()
                 .resolve("src/main/java/com/example");
         Files.createDirectories(srcDir);
@@ -69,7 +68,7 @@ class MavenModulePluginFunctionalTest {
                 .build();
 
         assertEquals(TaskOutcome.SUCCESS,
-                result.task(":mavenClean").getOutcome());
+                result.task(":mavenAppClean").getOutcome());
     }
 
     @Test
@@ -78,9 +77,8 @@ class MavenModulePluginFunctionalTest {
                 .build();
 
         assertEquals(TaskOutcome.SUCCESS,
-                result.task(":mavenPackage").getOutcome());
+                result.task(":mavenAppPackage").getOutcome());
 
-        // Verify the artifact was created
         File artifact = new File(projectDir, "target/test-maven-module-1.0.0.jar");
         assertTrue(artifact.exists(), "Maven should have produced the jar artifact");
     }
@@ -91,7 +89,7 @@ class MavenModulePluginFunctionalTest {
                 .build();
 
         assertEquals(TaskOutcome.SUCCESS,
-                result.task(":mavenVerify").getOutcome());
+                result.task(":mavenAppVerify").getOutcome());
     }
 
     @Test
@@ -99,8 +97,8 @@ class MavenModulePluginFunctionalTest {
         BuildResult result = createRunner("build")
                 .build();
 
-        assertNotNull(result.task(":mavenPackage"));
-        assertNotNull(result.task(":mavenVerify"));
+        assertNotNull(result.task(":mavenAppPackage"));
+        assertNotNull(result.task(":mavenAppVerify"));
         assertEquals(TaskOutcome.SUCCESS,
                 result.task(":build").getOutcome());
     }
@@ -111,29 +109,30 @@ class MavenModulePluginFunctionalTest {
                 .build();
 
         assertEquals(TaskOutcome.SUCCESS,
-                result.task(":mavenInstall").getOutcome());
+                result.task(":mavenAppInstall").getOutcome());
     }
 
     @Test
     void mavenTasksCanBeRunDirectly() {
-        BuildResult result = createRunner("mavenCompile")
+        BuildResult result = createRunner("mavenAppCompile")
                 .build();
 
         assertEquals(TaskOutcome.SUCCESS,
-                result.task(":mavenCompile").getOutcome());
+                result.task(":mavenAppCompile").getOutcome());
     }
 
     @Test
     void customProfilesAndPropertiesArePassedToMaven() throws IOException {
-        // Modify build.gradle to include custom config
         writeFile("build.gradle", """
                 plugins {
                     id 'se.alipsa.gradle.maven-module'
                 }
 
-                mavenModule {
-                    systemProperties = ['skipTests': 'true']
-                    args = ['--batch-mode']
+                mavenModules {
+                    app {
+                        systemProperties = ['skipTests': 'true']
+                        args = ['--batch-mode']
+                    }
                 }
                 """);
 
@@ -141,7 +140,7 @@ class MavenModulePluginFunctionalTest {
                 .build();
 
         assertEquals(TaskOutcome.SUCCESS,
-                result.task(":mavenPackage").getOutcome());
+                result.task(":mavenAppPackage").getOutcome());
         assertTrue(result.getOutput().contains("-DskipTests=true"));
         assertTrue(result.getOutput().contains("--batch-mode"));
     }
@@ -152,21 +151,107 @@ class MavenModulePluginFunctionalTest {
                 .build();
 
         String output = result.getOutput();
-        assertTrue(output.contains("mavenClean"));
-        assertTrue(output.contains("mavenCompile"));
-        assertTrue(output.contains("mavenTest"));
-        assertTrue(output.contains("mavenPackage"));
-        assertTrue(output.contains("mavenVerify"));
-        assertTrue(output.contains("mavenInstall"));
-        assertTrue(output.contains("mavenDeploy"));
+        assertTrue(output.contains("mavenAppClean"));
+        assertTrue(output.contains("mavenAppCompile"));
+        assertTrue(output.contains("mavenAppTest"));
+        assertTrue(output.contains("mavenAppPackage"));
+        assertTrue(output.contains("mavenAppVerify"));
+        assertTrue(output.contains("mavenAppInstall"));
+        assertTrue(output.contains("mavenAppDeploy"));
+    }
+
+    @Test
+    void multipleModulesWithCustomPomFile() throws IOException {
+        writeFile("bom.xml", """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <project xmlns="http://maven.apache.org/POM/4.0.0">
+                    <modelVersion>4.0.0</modelVersion>
+                    <groupId>com.example</groupId>
+                    <artifactId>test-bom</artifactId>
+                    <version>1.0.0</version>
+                    <packaging>pom</packaging>
+                </project>
+                """);
+
+        writeFile("build.gradle", """
+                plugins {
+                    id 'se.alipsa.gradle.maven-module'
+                }
+                mavenModules {
+                    bom {
+                        pomFile = file('bom.xml')
+                    }
+                    app {
+                        mustRunAfter 'bom'
+                    }
+                }
+                """);
+
+        // Verify both module tasks are registered
+        BuildResult result = createRunner("tasks", "--all")
+                .build();
+
+        String output = result.getOutput();
+        assertTrue(output.contains("mavenBomInstall"));
+        assertTrue(output.contains("mavenBomPackage"));
+        assertTrue(output.contains("mavenAppPackage"));
+        assertTrue(output.contains("mavenAppInstall"));
+    }
+
+    @Test
+    void multipleModulesRunInOrder() throws IOException {
+        writeFile("bom.xml", """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <project xmlns="http://maven.apache.org/POM/4.0.0">
+                    <modelVersion>4.0.0</modelVersion>
+                    <groupId>com.example</groupId>
+                    <artifactId>test-bom</artifactId>
+                    <version>1.0.0</version>
+                    <packaging>pom</packaging>
+                </project>
+                """);
+
+        writeFile("build.gradle", """
+                plugins {
+                    id 'se.alipsa.gradle.maven-module'
+                }
+                mavenModules {
+                    bom {
+                        pomFile = file('bom.xml')
+                    }
+                    app {
+                        mustRunAfter 'bom'
+                    }
+                }
+                """);
+
+        // Run install for both — bom should install before app starts
+        BuildResult result = createRunner("mavenBomInstall", "mavenAppInstall")
+                .build();
+
+        assertEquals(TaskOutcome.SUCCESS, result.task(":mavenBomInstall").getOutcome());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":mavenAppInstall").getOutcome());
+
+        // Verify ordering: bom install appears before app install in output
+        String output = result.getOutput();
+        int bomPos = output.indexOf("mavenBomInstall");
+        int appPos = output.indexOf("mavenAppInstall");
+        assertTrue(bomPos < appPos, "bom install should run before app install");
     }
 
     private GradleRunner createRunner(String... arguments) {
-        return GradleRunner.create()
+        GradleRunner runner = GradleRunner.create()
                 .withProjectDir(projectDir)
                 .withArguments(arguments)
                 .withPluginClasspath()
                 .forwardOutput();
+
+        String testGradleVersion = System.getProperty("testGradleVersion", "");
+        if (!testGradleVersion.isEmpty()) {
+            runner.withGradleVersion(testGradleVersion);
+        }
+
+        return runner;
     }
 
     private void writeFile(String path, String content) throws IOException {

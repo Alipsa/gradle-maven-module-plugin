@@ -1,8 +1,8 @@
 package se.alipsa.gradle.mavenmodule;
 
+import org.gradle.api.NamedDomainObjectContainer;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
-import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.plugins.BasePlugin;
 import org.gradle.api.tasks.TaskProvider;
 
@@ -12,121 +12,164 @@ import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
 import java.io.File;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
- * Gradle plugin that allows a Maven project (with pom.xml) to participate
- * in a Gradle multi-project build.
+ * Gradle plugin that allows Maven projects (with pom.xml) to participate
+ * in a Gradle multi-project build. Modules are configured via the
+ * {@code mavenModules} container.
  */
 public class MavenModulePlugin implements Plugin<Project> {
 
+    private static final String[][] PHASES = {
+        {"Clean", "clean"},
+        {"Compile", "compile"},
+        {"Test", "test"},
+        {"Package", "package"},
+        {"Verify", "verify"},
+        {"Install", "install"},
+        {"Deploy", "deploy"},
+    };
+
     @Override
     public void apply(Project project) {
-        // Apply the base plugin to get clean, assemble, check, build lifecycle tasks
         project.getPluginManager().apply(BasePlugin.class);
 
-        // Create the extension
-        MavenModuleExtension extension = project.getExtensions()
-                .create("mavenModule", MavenModuleExtension.class);
+        NamedDomainObjectContainer<MavenModule> modules = project.container(
+            MavenModule.class,
+            name -> project.getObjects().newInstance(MavenModule.class, name)
+        );
+        project.getExtensions().add("mavenModules", modules);
 
-        // Set defaults
-        extension.getWorkingDir().convention(project.getProjectDir());
-
-        // Parse pom.xml for project metadata
-        PomInfo pomInfo = parsePom(project);
-        if (pomInfo != null) {
-            if (pomInfo.groupId != null) {
-                project.setGroup(pomInfo.groupId);
-            }
-            if (pomInfo.version != null) {
-                project.setVersion(pomInfo.version);
-            }
-            if (pomInfo.description != null) {
-                project.setDescription(pomInfo.description);
-            }
-        }
-
-        // Register fine-grained maven tasks
-        TaskProvider<MavenExecTask> mavenClean = registerMavenTask(project, "mavenClean", "clean", extension, "Runs Maven clean phase");
-        TaskProvider<MavenExecTask> mavenCompile = registerMavenTask(project, "mavenCompile", "compile", extension, "Runs Maven compile phase");
-        TaskProvider<MavenExecTask> mavenTest = registerMavenTask(project, "mavenTest", "test", extension, "Runs Maven test phase");
-        TaskProvider<MavenExecTask> mavenPackage = registerMavenTask(project, "mavenPackage", "package", extension, "Runs Maven package phase");
-        TaskProvider<MavenExecTask> mavenVerify = registerMavenTask(project, "mavenVerify", "verify", extension, "Runs Maven verify phase");
-        TaskProvider<MavenExecTask> mavenInstall = registerMavenTask(project, "mavenInstall", "install", extension, "Runs Maven install phase");
-        TaskProvider<MavenExecTask> mavenDeploy = registerMavenTask(project, "mavenDeploy", "deploy", extension, "Runs Maven deploy phase");
-
-        // Set up task dependency chain
-        mavenTest.configure(t -> t.mustRunAfter(mavenCompile));
-        mavenPackage.configure(t -> t.mustRunAfter(mavenTest));
-        mavenVerify.configure(t -> t.mustRunAfter(mavenPackage));
-        mavenInstall.configure(t -> t.mustRunAfter(mavenVerify));
-        mavenDeploy.configure(t -> t.mustRunAfter(mavenInstall));
-
-        // Wire lifecycle tasks
-        project.getTasks().named("clean", task -> task.dependsOn(mavenClean));
-        project.getTasks().named("assemble", task -> task.dependsOn(mavenPackage));
-        project.getTasks().named("check", task -> task.dependsOn(mavenVerify));
-
-        // Register publishToMavenLocal and publish tasks
+        // Register publishing lifecycle tasks
         project.getTasks().register("publishToMavenLocal", task -> {
-            task.setDescription("Publishes Maven module to the local Maven repository");
+            task.setDescription("Publishes Maven modules to the local Maven repository");
             task.setGroup("publishing");
-            task.dependsOn(mavenInstall);
         });
-
         project.getTasks().register("publish", task -> {
-            task.setDescription("Publishes Maven module using Maven deploy");
+            task.setDescription("Publishes Maven modules using Maven deploy");
             task.setGroup("publishing");
-            task.dependsOn(mavenDeploy);
         });
 
-        // Artifact integration: expose the Maven-built artifact to Gradle
-        if (pomInfo != null) {
-            setupArtifactIntegration(project, pomInfo, mavenPackage);
+        // Register tasks as modules are added to the container
+        modules.all(module -> {
+            module.getPomFile().convention(new File(project.getProjectDir(), "pom.xml"));
+            // workingDir defaults to the POM file's parent directory
+            module.getWorkingDir().convention(
+                module.getPomFile().map(f -> f.getParentFile())
+            );
+            registerModuleTasks(project, module);
+        });
+
+        // After evaluation: parse POMs, set up artifacts, wire cross-module ordering
+        project.afterEvaluate(p -> {
+            for (MavenModule module : modules) {
+                PomInfo pomInfo = parsePom(p, module.getPomFile().get());
+                if (pomInfo != null) {
+                    setupArtifactIntegration(p, module, pomInfo);
+                }
+            }
+            wireOrdering(p, modules);
+        });
+    }
+
+    private void registerModuleTasks(Project project, MavenModule module) {
+        String cap = capitalize(module.getName());
+        String prefix = "maven" + cap;
+        Map<String, TaskProvider<MavenExecTask>> phaseTasks = new LinkedHashMap<>();
+
+        for (String[] phaseEntry : PHASES) {
+            String phaseLabel = phaseEntry[0];
+            String phase = phaseEntry[1];
+            String taskName = prefix + phaseLabel;
+
+            TaskProvider<MavenExecTask> taskProvider = project.getTasks().register(
+                taskName, MavenExecTask.class, task -> {
+                    task.setDescription("Runs Maven " + phase + " phase for " + module.getName());
+                    task.setGroup("maven");
+                    task.getPhase().set(phase);
+                    task.getPomFile().set(module.getPomFile());
+                    task.getMavenExecutable().set(module.getMavenExecutable());
+                    task.getProfiles().set(module.getProfiles());
+                    task.getSystemProperties().set(module.getSystemProperties());
+                    task.getArgs().set(module.getArgs());
+                    task.getWorkingDir().set(module.getWorkingDir());
+                    task.getEnvironment().set(module.getEnvironment());
+                }
+            );
+            phaseTasks.put(phase, taskProvider);
+        }
+
+        // Intra-module task ordering
+        phaseTasks.get("test").configure(t -> t.mustRunAfter(phaseTasks.get("compile")));
+        phaseTasks.get("package").configure(t -> t.mustRunAfter(phaseTasks.get("test")));
+        phaseTasks.get("verify").configure(t -> t.mustRunAfter(phaseTasks.get("package")));
+        phaseTasks.get("install").configure(t -> t.mustRunAfter(phaseTasks.get("verify")));
+        phaseTasks.get("deploy").configure(t -> t.mustRunAfter(phaseTasks.get("install")));
+
+        // Wire to lifecycle tasks
+        project.getTasks().named("clean", t -> t.dependsOn(phaseTasks.get("clean")));
+        project.getTasks().named("assemble", t -> t.dependsOn(phaseTasks.get("package")));
+        project.getTasks().named("check", t -> t.dependsOn(phaseTasks.get("verify")));
+        project.getTasks().named("publishToMavenLocal", t -> t.dependsOn(phaseTasks.get("install")));
+        project.getTasks().named("publish", t -> t.dependsOn(phaseTasks.get("deploy")));
+    }
+
+    private void wireOrdering(Project project, NamedDomainObjectContainer<MavenModule> modules) {
+        for (MavenModule module : modules) {
+            for (String afterName : module.getMustRunAfterModules()) {
+                MavenModule afterModule = modules.findByName(afterName);
+                if (afterModule == null) {
+                    project.getLogger().warn(
+                        "mavenModules: '{}' declares mustRunAfter '{}' which does not exist",
+                        module.getName(), afterName);
+                    continue;
+                }
+
+                String modulePrefix = "maven" + capitalize(module.getName());
+                String afterPrefix = "maven" + capitalize(afterModule.getName());
+
+                // All tasks of this module must run after all tasks of the other module
+                for (String[] phaseEntry : PHASES) {
+                    project.getTasks().named(modulePrefix + phaseEntry[0], task -> {
+                        for (String[] afterPhaseEntry : PHASES) {
+                            task.mustRunAfter(project.getTasks().named(afterPrefix + afterPhaseEntry[0]));
+                        }
+                    });
+                }
+            }
         }
     }
 
-    private TaskProvider<MavenExecTask> registerMavenTask(
-            Project project, String taskName, String phase,
-            MavenModuleExtension extension, String description) {
-
-        return project.getTasks().register(taskName, MavenExecTask.class, task -> {
-            task.setDescription(description);
-            task.setGroup("maven");
-            task.getPhase().set(phase);
-            task.getMavenExecutable().set(extension.getMavenExecutable());
-            task.getProfiles().set(extension.getProfiles());
-            task.getSystemProperties().set(extension.getSystemProperties());
-            task.getArgs().set(extension.getArgs());
-            task.getWorkingDir().set(extension.getWorkingDir());
-            task.getEnvironment().set(extension.getEnvironment());
-        });
-    }
-
-    private void setupArtifactIntegration(Project project, PomInfo pomInfo,
-                                          TaskProvider<MavenExecTask> mavenPackage) {
+    private void setupArtifactIntegration(Project project, MavenModule module, PomInfo pomInfo) {
         String packaging = pomInfo.packaging != null ? pomInfo.packaging : "jar";
+        if ("pom".equals(packaging)) {
+            return;
+        }
+
         String artifactId = pomInfo.artifactId;
         String version = pomInfo.version;
-
         if (artifactId == null || version == null) {
             return;
         }
 
-        Configuration defaultConfig = project.getConfigurations().maybeCreate("default");
+        project.getConfigurations().maybeCreate("default");
 
+        String cap = capitalize(module.getName());
         String artifactFileName = artifactId + "-" + version + "." + packaging;
-        File artifactFile = new File(project.getProjectDir(), "target/" + artifactFileName);
+        File workDir = module.getWorkingDir().get();
+        File artifactFile = new File(workDir, "target/" + artifactFileName);
 
         project.getArtifacts().add("default", artifactFile, artifact -> {
             artifact.setType(packaging);
-            artifact.builtBy(mavenPackage);
+            artifact.builtBy(project.getTasks().named("maven" + cap + "Package"));
         });
     }
 
-    static PomInfo parsePom(Project project) {
-        File pomFile = new File(project.getProjectDir(), "pom.xml");
+    static PomInfo parsePom(Project project, File pomFile) {
         if (!pomFile.exists()) {
-            project.getLogger().warn("No pom.xml found in {}", project.getProjectDir());
+            project.getLogger().warn("POM file not found: {}", pomFile);
             return null;
         }
 
@@ -160,7 +203,7 @@ public class MavenModulePlugin implements Plugin<Project> {
 
             return info;
         } catch (Exception e) {
-            project.getLogger().error("Failed to parse pom.xml: {}", e.getMessage());
+            project.getLogger().error("Failed to parse {}: {}", pomFile.getName(), e.getMessage());
             return null;
         }
     }
@@ -177,6 +220,11 @@ public class MavenModulePlugin implements Plugin<Project> {
             }
         }
         return null;
+    }
+
+    private static String capitalize(String s) {
+        if (s == null || s.isEmpty()) return s;
+        return Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
 
     static class PomInfo {

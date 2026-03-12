@@ -1,6 +1,6 @@
 # gradle-maven-module-plugin
 
-A Gradle plugin that allows a Maven project (with a `pom.xml`) to participate in a Gradle multi-project build. It maps Gradle lifecycle tasks to Maven phases so that standard Gradle commands work seamlessly with Maven subprojects.
+A Gradle plugin that allows Maven projects (with `pom.xml`) to participate in a Gradle multi-project build. It maps Gradle lifecycle tasks to Maven phases so that standard Gradle commands work seamlessly with Maven subprojects.
 
 ## Use Case
 
@@ -18,11 +18,15 @@ root/
 
 ## Setup
 
-Apply the plugin in the Maven subproject's `build.gradle`:
+Apply the plugin in the Maven subproject's `build.gradle` and declare your modules:
 
 ```groovy
 plugins {
-    id 'se.alipsa.gradle.maven-module' version '0.1.0-SNAPSHOT'
+    id 'se.alipsa.gradle.maven-module' version '0.1.0'
+}
+
+mavenModules {
+    app {}
 }
 ```
 
@@ -35,40 +39,70 @@ include 'gradle-module', 'maven-module'
 
 ## Task Mapping
 
-| Gradle Task             | Maven Phase | Notes                            |
-|-------------------------|-------------|----------------------------------|
-| `clean`                 | `clean`     | Via `base` plugin's `clean` task |
-| `assemble`              | `package`   | Produces the artifact            |
-| `check`                 | `verify`    | Runs tests + integration tests   |
-| `build`                 | (inherited) | `assemble` + `check` from `base` |
-| `publishToMavenLocal`   | `install`   | Installs to local Maven repo    |
-| `publish`               | `deploy`    | Deploys via Maven                |
+Each module named `<name>` gets tasks prefixed with `maven<Name>`:
 
-Fine-grained `maven*` tasks are also registered for direct use:
-`mavenCompile`, `mavenTest`, `mavenPackage`, `mavenVerify`, `mavenInstall`, `mavenDeploy`, `mavenClean`
+| Gradle Lifecycle Task | Module Task (e.g. `app`) | Maven Phase |
+|-----------------------|--------------------------|-------------|
+| `clean`               | `mavenAppClean`          | `clean`     |
+| `assemble`            | `mavenAppPackage`        | `package`   |
+| `check`               | `mavenAppVerify`         | `verify`    |
+| `build`               | (inherited)              | `assemble` + `check` |
+| `publishToMavenLocal` | `mavenAppInstall`        | `install`   |
+| `publish`             | `mavenAppDeploy`         | `deploy`    |
+
+Additional fine-grained tasks: `maven<Name>Compile`, `maven<Name>Test`
 
 ## Configuration
 
 ```groovy
-mavenModule {
-    // Maven executable (auto-detects mvnw if not set)
-    mavenExecutable = '/path/to/mvn'
+mavenModules {
+    app {
+        // POM file to use (defaults to pom.xml)
+        pomFile = file('bom.xml')
 
-    // Maven profiles to activate
-    profiles = ['ci', 'integration']
+        // Maven executable (auto-detects mvnw if not set, or falls back to mvn on PATH)
+        mavenExecutable = '/path/to/mvn'
 
-    // System properties passed as -D flags
-    systemProperties = ['skipTests': 'true', 'maven.javadoc.skip': 'true']
+        // Maven profiles to activate
+        profiles = ['ci', 'integration']
 
-    // Additional CLI arguments
-    args = ['--batch-mode', '-X']
+        // System properties passed as -D flags
+        systemProperties = ['skipTests': 'true', 'maven.javadoc.skip': 'true']
 
-    // Working directory (defaults to project.projectDir)
-    workingDir = project.projectDir
+        // Additional CLI arguments
+        args = ['--batch-mode', '-X']
 
-    // Environment variables for the Maven process
-    environment = ['JAVA_HOME': '/usr/lib/jvm/java-17']
+        // Working directory (defaults to project.projectDir)
+        workingDir = project.projectDir
+
+        // Environment variables for the Maven process
+        environment = ['JAVA_HOME': '/usr/lib/jvm/java-17']
+    }
 }
+```
+
+## Multiple Maven Modules
+
+A single project directory can contain multiple POM files (e.g., a BOM and a main build). Define them as separate named modules and use `mustRunAfter` to control ordering:
+
+```groovy
+mavenModules {
+    bom {
+        pomFile = file('myMavenProject/bom.xml')
+    }
+    app {
+        pomFile = file('myMavenProject/pom.xml')
+        mustRunAfter 'bom'
+    }
+}
+```
+
+This registers separate task sets (`mavenBom*` and `mavenApp*`). The `mustRunAfter` declaration ensures `bom` tasks complete before `app` tasks when both are requested. Lifecycle tasks like `build` aggregate all modules. The `workingDir` defaults to the POM file's parent directory.
+
+Run individual module tasks directly:
+
+```bash
+./gradlew mavenBomInstall mavenAppVerify
 ```
 
 ## Maven Wrapper Support
@@ -77,12 +111,7 @@ The plugin automatically detects `mvnw` (or `mvnw.cmd` on Windows) in the projec
 
 ## POM Integration
 
-The plugin parses `pom.xml` to:
-- Set `project.group` and `project.version` from the POM's GAV coordinates
-- Set `project.description` from the POM
-- Expose the built artifact (e.g., `target/*.jar`) as a Gradle artifact
-
-This means other Gradle modules can depend on the Maven module:
+The plugin parses each module's POM file to expose built artifacts (e.g., `target/*.jar`) to Gradle's dependency system. This means other Gradle modules can depend on the Maven module:
 
 ```groovy
 // In another subproject's build.gradle
