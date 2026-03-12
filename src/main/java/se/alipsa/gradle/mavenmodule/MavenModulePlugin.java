@@ -42,12 +42,6 @@ public class MavenModulePlugin implements Plugin<Project> {
         );
         project.getExtensions().add("mavenModules", modules);
 
-        // Register or reuse publishing lifecycle tasks (may already exist from maven-publish)
-        findOrRegisterTask(project, "publishToMavenLocal",
-            "Publishes Maven modules to the local Maven repository", "publishing");
-        findOrRegisterTask(project, "publish",
-            "Publishes Maven modules using Maven deploy", "publishing");
-
         // Register tasks as modules are added to the container
         modules.all(module -> {
             module.getPomFile().convention(new File(project.getProjectDir(), "pom.xml"));
@@ -58,9 +52,22 @@ public class MavenModulePlugin implements Plugin<Project> {
             registerModuleTasks(project, module);
         });
 
-        // After evaluation: parse POMs, set up artifacts, wire cross-module ordering
+        // After evaluation: register/reuse publishing tasks, parse POMs, wire ordering
         project.afterEvaluate(p -> {
+            // Create publishing lifecycle tasks if not already defined by another plugin
+            findOrRegisterTask(p, "publishToMavenLocal",
+                "Publishes Maven modules to the local Maven repository", "publishing");
+            findOrRegisterTask(p, "publish",
+                "Publishes Maven modules using Maven deploy", "publishing");
+
             for (MavenModule module : modules) {
+                // Wire module install/deploy tasks to publishing lifecycle tasks
+                String cap = capitalize(module.getName());
+                p.getTasks().named("publishToMavenLocal",
+                    t -> t.dependsOn(p.getTasks().named("maven" + cap + "Install")));
+                p.getTasks().named("publish",
+                    t -> t.dependsOn(p.getTasks().named("maven" + cap + "Deploy")));
+
                 PomInfo pomInfo = parsePom(p, module.getPomFile().get());
                 if (pomInfo != null) {
                     setupArtifactIntegration(p, module, pomInfo);
@@ -104,12 +111,11 @@ public class MavenModulePlugin implements Plugin<Project> {
         phaseTasks.get("install").configure(t -> t.mustRunAfter(phaseTasks.get("verify")));
         phaseTasks.get("deploy").configure(t -> t.mustRunAfter(phaseTasks.get("install")));
 
-        // Wire to lifecycle tasks
+        // Wire to lifecycle tasks (from BasePlugin)
         project.getTasks().named("clean", t -> t.dependsOn(phaseTasks.get("clean")));
         project.getTasks().named("assemble", t -> t.dependsOn(phaseTasks.get("package")));
         project.getTasks().named("check", t -> t.dependsOn(phaseTasks.get("verify")));
-        project.getTasks().named("publishToMavenLocal", t -> t.dependsOn(phaseTasks.get("install")));
-        project.getTasks().named("publish", t -> t.dependsOn(phaseTasks.get("deploy")));
+        // publishToMavenLocal and publish are wired in afterEvaluate to avoid conflicts
     }
 
     private void wireOrdering(Project project, NamedDomainObjectContainer<MavenModule> modules) {
@@ -170,8 +176,13 @@ public class MavenModulePlugin implements Plugin<Project> {
         }
 
         try {
-            Document doc = DocumentBuilderFactory.newInstance()
-                    .newDocumentBuilder().parse(pomFile);
+            DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+            dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            dbf.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            dbf.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            dbf.setXIncludeAware(false);
+            dbf.setExpandEntityReferences(false);
+            Document doc = dbf.newDocumentBuilder().parse(pomFile);
             doc.getDocumentElement().normalize();
 
             Element root = doc.getDocumentElement();

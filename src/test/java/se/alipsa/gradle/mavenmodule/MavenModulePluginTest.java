@@ -63,12 +63,13 @@ class MavenModulePluginTest {
     void pluginRegistersLifecycleTasks() {
         Project project = createProjectWithModule("app");
 
+        // BasePlugin lifecycle tasks are registered eagerly
         assertNotNull(project.getTasks().findByName("clean"));
         assertNotNull(project.getTasks().findByName("assemble"));
         assertNotNull(project.getTasks().findByName("check"));
         assertNotNull(project.getTasks().findByName("build"));
-        assertNotNull(project.getTasks().findByName("publishToMavenLocal"));
-        assertNotNull(project.getTasks().findByName("publish"));
+        // publishToMavenLocal and publish are registered in afterEvaluate
+        // to avoid conflicts with maven-publish; verified in functional tests
     }
 
     @Test
