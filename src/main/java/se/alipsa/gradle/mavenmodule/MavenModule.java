@@ -1,5 +1,6 @@
 package se.alipsa.gradle.mavenmodule;
 
+import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.MapProperty;
@@ -31,7 +32,7 @@ import java.util.List;
 public class MavenModule {
 
     private final String name;
-    private final Property<File> pomFile;
+    private final RegularFileProperty pomFile;
     private final Property<String> mavenExecutable;
     private final ListProperty<String> profiles;
     private final MapProperty<String, String> systemProperties;
@@ -48,7 +49,7 @@ public class MavenModule {
     @Inject
     public MavenModule(String name, ObjectFactory objects) {
         this.name = name;
-        this.pomFile = objects.property(File.class);
+        this.pomFile = objects.fileProperty();
         this.mavenExecutable = objects.property(String.class);
         this.profiles = objects.listProperty(String.class);
         this.systemProperties = objects.mapProperty(String.class, String.class);
@@ -69,7 +70,7 @@ public class MavenModule {
      * Set this to use an alternative POM file (e.g. {@code bom.xml}).
      * @return the pom file property
      */
-    public Property<File> getPomFile() {
+    public RegularFileProperty getPomFile() {
         return pomFile;
     }
 

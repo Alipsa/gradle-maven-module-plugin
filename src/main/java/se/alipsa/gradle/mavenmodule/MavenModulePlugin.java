@@ -44,10 +44,12 @@ public class MavenModulePlugin implements Plugin<Project> {
 
         // Register tasks as modules are added to the container
         modules.all(module -> {
-            module.getPomFile().convention(new File(project.getProjectDir(), "pom.xml"));
+            module.getPomFile().convention(
+                project.getLayout().getProjectDirectory().file("pom.xml")
+            );
             // workingDir defaults to the POM file's parent directory
             module.getWorkingDir().convention(
-                module.getPomFile().map(f -> f.getParentFile())
+                module.getPomFile().map(f -> f.getAsFile().getParentFile())
             );
             registerModuleTasks(project, module);
         });
@@ -69,7 +71,7 @@ public class MavenModulePlugin implements Plugin<Project> {
                 p.getTasks().named("publish",
                     t -> t.dependsOn(p.getTasks().named("maven" + cap + "Deploy")));
 
-                PomInfo pomInfo = parsePom(p, module.getPomFile().get());
+                PomInfo pomInfo = parsePom(p, module.getPomFile().get().getAsFile());
                 if (pomInfo != null) {
                     // Apply POM metadata to the Gradle project from the first module
                     if (!metadataApplied) {

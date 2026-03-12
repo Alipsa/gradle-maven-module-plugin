@@ -95,7 +95,7 @@ class MavenModulePluginTest {
 
         assertFalse(module.getMavenExecutable().isPresent());
         assertEquals(projectDir, module.getWorkingDir().get());
-        assertEquals(new File(projectDir, "pom.xml"), module.getPomFile().get());
+        assertEquals(new File(projectDir, "pom.xml"), module.getPomFile().get().getAsFile());
         assertTrue(module.getProfiles().get().isEmpty());
         assertTrue(module.getSystemProperties().get().isEmpty());
         assertTrue(module.getArgs().get().isEmpty());

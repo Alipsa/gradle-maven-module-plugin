@@ -2,12 +2,16 @@ package se.alipsa.gradle.mavenmodule;
 
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
+import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.MapProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Input;
+import org.gradle.api.tasks.InputFile;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Optional;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
 import org.gradle.work.DisableCachingByDefault;
 import org.gradle.process.ExecOperations;
@@ -33,9 +37,10 @@ public abstract class MavenExecTask extends DefaultTask {
      * in the working directory, {@code -f} is passed to Maven.
      * @return the pom file property
      */
-    @Input
+    @InputFile
     @Optional
-    public abstract Property<File> getPomFile();
+    @PathSensitive(PathSensitivity.RELATIVE)
+    public abstract RegularFileProperty getPomFile();
 
     /**
      * The Maven phase to execute (e.g. compile, test, package, verify, install, deploy, clean).
@@ -146,7 +151,7 @@ public abstract class MavenExecTask extends DefaultTask {
         cmd.add(executable);
 
         if (getPomFile().isPresent()) {
-            File pomFile = getPomFile().get();
+            File pomFile = getPomFile().get().getAsFile();
             File defaultPom = new File(getWorkingDir().get(), "pom.xml");
             if (!pomFile.getAbsoluteFile().equals(defaultPom.getAbsoluteFile())) {
                 cmd.add("-f");
