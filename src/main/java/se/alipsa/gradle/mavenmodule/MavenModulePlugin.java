@@ -230,7 +230,7 @@ public class MavenModulePlugin implements Plugin<Project> {
 
             return info;
         } catch (Exception e) {
-            project.getLogger().error("Failed to parse {}: {}", pomFile.getName(), e.getMessage());
+            project.getLogger().error("Failed to parse {}: {}", pomFile.getName(), e.getMessage(), e);
             return null;
         }
     }
