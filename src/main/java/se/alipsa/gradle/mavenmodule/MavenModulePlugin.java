@@ -42,6 +42,10 @@ public class MavenModulePlugin implements Plugin<Project> {
         );
         project.getExtensions().add("mavenModules", modules);
 
+        // Apply POM metadata from the first module eagerly so that group/version/description
+        // are available during the configuration phase (not deferred to afterEvaluate).
+        boolean[] metadataApplied = {false};
+
         // Register tasks as modules are added to the container
         modules.all(module -> {
             module.getPomFile().convention(
@@ -52,32 +56,40 @@ public class MavenModulePlugin implements Plugin<Project> {
                 module.getPomFile().map(f -> f.getAsFile().getParentFile())
             );
             registerModuleTasks(project, module);
+
+            if (!metadataApplied[0]) {
+                PomInfo pomInfo = parsePom(project, module.getPomFile().get().getAsFile());
+                if (pomInfo != null) {
+                    applyPomMetadata(project, pomInfo);
+                    metadataApplied[0] = true;
+                }
+            }
         });
 
-        // After evaluation: register/reuse publishing tasks, parse POMs, wire ordering
+        // After evaluation: wire publishing tasks, set up artifact integration, wire ordering
         project.afterEvaluate(p -> {
-            // Create publishing lifecycle tasks if not already defined by another plugin
-            findOrRegisterTask(p, "publishToMavenLocal",
+            // Create publishing lifecycle tasks if not already defined by another plugin.
+            // Only wire dependencies when this plugin owns the tasks to avoid mutating
+            // tasks registered by other plugins (e.g. maven-publish).
+            boolean ownPublishToMavenLocal = findOrRegisterTask(p, "publishToMavenLocal",
                 "Publishes Maven modules to the local Maven repository", "publishing");
-            findOrRegisterTask(p, "publish",
+            boolean ownPublish = findOrRegisterTask(p, "publish",
                 "Publishes Maven modules using Maven deploy", "publishing");
 
-            boolean metadataApplied = false;
             for (MavenModule module : modules) {
-                // Wire module install/deploy tasks to publishing lifecycle tasks
                 String cap = capitalize(module.getName());
-                p.getTasks().named("publishToMavenLocal",
-                    t -> t.dependsOn(p.getTasks().named("maven" + cap + "Install")));
-                p.getTasks().named("publish",
-                    t -> t.dependsOn(p.getTasks().named("maven" + cap + "Deploy")));
+
+                if (ownPublishToMavenLocal) {
+                    p.getTasks().named("publishToMavenLocal",
+                        t -> t.dependsOn(p.getTasks().named("maven" + cap + "Install")));
+                }
+                if (ownPublish) {
+                    p.getTasks().named("publish",
+                        t -> t.dependsOn(p.getTasks().named("maven" + cap + "Deploy")));
+                }
 
                 PomInfo pomInfo = parsePom(p, module.getPomFile().get().getAsFile());
                 if (pomInfo != null) {
-                    // Apply POM metadata to the Gradle project from the first module
-                    if (!metadataApplied) {
-                        applyPomMetadata(p, pomInfo);
-                        metadataApplied = true;
-                    }
                     setupArtifactIntegration(p, module, pomInfo);
                 }
             }
@@ -249,15 +261,16 @@ public class MavenModulePlugin implements Plugin<Project> {
         return null;
     }
 
-    private static void findOrRegisterTask(Project project, String name,
+    private static boolean findOrRegisterTask(Project project, String name,
                                                String description, String group) {
         if (project.getTasks().getNames().contains(name)) {
-            return;
+            return false;
         }
         project.getTasks().register(name, task -> {
             task.setDescription(description);
             task.setGroup(group);
         });
+        return true;
     }
 
     private static String capitalize(String s) {
