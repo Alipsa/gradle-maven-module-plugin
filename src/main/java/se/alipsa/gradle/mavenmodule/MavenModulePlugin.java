@@ -42,10 +42,6 @@ public class MavenModulePlugin implements Plugin<Project> {
         );
         project.getExtensions().add("mavenModules", modules);
 
-        // Apply POM metadata from the first module eagerly so that group/version/description
-        // are available during the configuration phase (not deferred to afterEvaluate).
-        boolean[] metadataApplied = {false};
-
         // Register tasks as modules are added to the container
         modules.all(module -> {
             module.getPomFile().convention(
@@ -56,17 +52,10 @@ public class MavenModulePlugin implements Plugin<Project> {
                 module.getPomFile().map(f -> f.getAsFile().getParentFile())
             );
             registerModuleTasks(project, module);
-
-            if (!metadataApplied[0]) {
-                PomInfo pomInfo = parsePom(project, module.getPomFile().get().getAsFile());
-                if (pomInfo != null) {
-                    applyPomMetadata(project, pomInfo);
-                    metadataApplied[0] = true;
-                }
-            }
         });
 
-        // After evaluation: wire publishing tasks, set up artifact integration, wire ordering
+        // After evaluation: apply POM metadata (using finalized pomFile values),
+        // wire publishing tasks, set up artifact integration, wire ordering
         project.afterEvaluate(p -> {
             // Create publishing lifecycle tasks if not already defined by another plugin.
             // Only wire dependencies when this plugin owns the tasks to avoid mutating
@@ -76,6 +65,7 @@ public class MavenModulePlugin implements Plugin<Project> {
             boolean ownPublish = findOrRegisterTask(p, "publish",
                 "Publishes Maven modules using Maven deploy", "publishing");
 
+            boolean metadataApplied = false;
             for (MavenModule module : modules) {
                 String cap = capitalize(module.getName());
 
@@ -90,6 +80,10 @@ public class MavenModulePlugin implements Plugin<Project> {
 
                 PomInfo pomInfo = parsePom(p, module.getPomFile().get().getAsFile());
                 if (pomInfo != null) {
+                    if (!metadataApplied) {
+                        applyPomMetadata(p, pomInfo);
+                        metadataApplied = true;
+                    }
                     setupArtifactIntegration(p, module, pomInfo);
                 }
             }
@@ -192,8 +186,9 @@ public class MavenModulePlugin implements Plugin<Project> {
 
         String cap = capitalize(module.getName());
         String artifactFileName = artifactId + "-" + version + "." + packaging;
-        File workDir = module.getWorkingDir().get();
-        File artifactFile = new File(workDir, "target/" + artifactFileName);
+        // Maven writes to target/ relative to the POM file's directory, not workingDir
+        File pomDir = module.getPomFile().get().getAsFile().getParentFile();
+        File artifactFile = new File(pomDir, "target/" + artifactFileName);
 
         project.getArtifacts().add("default", artifactFile, artifact -> {
             artifact.setType(packaging);

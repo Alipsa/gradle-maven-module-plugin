@@ -47,8 +47,10 @@ Each module named `<name>` gets tasks prefixed with `maven<Name>`:
 | `assemble`            | `mavenAppPackage`        | `package`   |
 | `check`               | `mavenAppVerify`         | `verify`    |
 | `build`               | (inherited)              | `assemble` + `check` |
-| `publishToMavenLocal` | `mavenAppInstall`        | `install`   |
-| `publish`             | `mavenAppDeploy`         | `deploy`    |
+| `publishToMavenLocal`* | `mavenAppInstall`        | `install`   |
+| `publish`*             | `mavenAppDeploy`         | `deploy`    |
+
+\* `publishToMavenLocal` and `publish` are only created and wired by this plugin when no other plugin (e.g. `maven-publish`) has already registered them. You can always invoke `maven<Name>Install` or `maven<Name>Deploy` directly.
 
 Additional fine-grained tasks: `maven<Name>Compile`, `maven<Name>Test`
 
