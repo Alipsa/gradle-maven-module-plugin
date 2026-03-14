@@ -113,7 +113,10 @@ The plugin automatically detects `mvnw` (or `mvnw.cmd` on Windows) in the projec
 
 ## POM Integration
 
-The plugin parses each module's POM file to expose built artifacts (e.g., `target/*.jar`) to Gradle's dependency system. This means other Gradle modules can depend on the Maven module:
+The plugin parses each module's POM file and:
+
+- **Sets project metadata** — `group`, `version`, and `description` are applied from the first module's POM (only when the project hasn't already set them). When the default `pom.xml` is present in the project directory, metadata is applied eagerly during configuration so other plugins can reference it. When the first module uses a non-default POM, metadata is applied after evaluation.
+- **Exposes built artifacts** — Artifacts (e.g., `target/*.jar`) are registered in Gradle's dependency system so other Gradle modules can depend on the Maven module:
 
 ```groovy
 // In another subproject's build.gradle

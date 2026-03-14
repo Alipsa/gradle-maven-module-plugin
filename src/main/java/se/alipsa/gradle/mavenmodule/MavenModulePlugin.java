@@ -36,6 +36,22 @@ public class MavenModulePlugin implements Plugin<Project> {
     public void apply(Project project) {
         project.getPluginManager().apply(BasePlugin.class);
 
+        // Apply POM metadata eagerly from the default pom.xml so that
+        // group/version/description are available during configuration for
+        // other plugins and build logic (e.g. publishing coordinates).
+        // When the first module uses a non-default POM, metadata is applied
+        // in afterEvaluate as a fallback once pomFile values are finalized.
+        File defaultPom = project.file("pom.xml");
+        boolean earlyMetadata = false;
+        if (defaultPom.exists()) {
+            PomInfo earlyInfo = parsePom(project, defaultPom);
+            if (earlyInfo != null) {
+                applyPomMetadata(project, earlyInfo);
+                earlyMetadata = true;
+            }
+        }
+        final boolean metadataAppliedEarly = earlyMetadata;
+
         NamedDomainObjectContainer<MavenModule> modules = project.container(
             MavenModule.class,
             name -> project.getObjects().newInstance(MavenModule.class, name)
@@ -54,8 +70,9 @@ public class MavenModulePlugin implements Plugin<Project> {
             registerModuleTasks(project, module);
         });
 
-        // After evaluation: apply POM metadata (using finalized pomFile values),
-        // wire publishing tasks, set up artifact integration, wire ordering
+        // After evaluation: wire publishing tasks, set up artifact integration,
+        // wire ordering, and apply POM metadata as a fallback if the default
+        // pom.xml was not present (e.g. when the first module uses a custom POM).
         project.afterEvaluate(p -> {
             // Create publishing lifecycle tasks if not already defined by another plugin.
             // Only wire dependencies when this plugin owns the tasks to avoid mutating
@@ -65,7 +82,7 @@ public class MavenModulePlugin implements Plugin<Project> {
             boolean ownPublish = findOrRegisterTask(p, "publish",
                 "Publishes Maven modules using Maven deploy", "publishing");
 
-            boolean metadataApplied = false;
+            boolean metadataApplied = metadataAppliedEarly;
             for (MavenModule module : modules) {
                 String cap = capitalize(module.getName());
 
