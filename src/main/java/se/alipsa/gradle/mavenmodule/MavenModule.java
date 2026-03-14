@@ -18,11 +18,10 @@ import java.util.List;
  * <pre>
  * mavenModules {
  *     app {
- *         pomFile = file('bom.xml')
+ *         pomFile = file('custom-pom.xml')
  *         profiles = ['ci']
  *         systemProperties = ['skipTests': 'true']
  *         args = ['-X']
- *         workingDir = project.projectDir
  *         environment = ['JAVA_HOME': '/usr/lib/jvm/java-17']
  *         mustRunAfter 'bom'
  *     }

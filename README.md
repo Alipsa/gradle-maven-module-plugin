@@ -10,10 +10,11 @@ In a multi-project Gradle build where some subprojects are Maven projects:
 root/
 ├── settings.gradle
 ├── gradle-module/
-│   └── build.gradle          (standard Gradle Java project)
+│   └── build.gradle              (standard Gradle Java project)
 └── maven-module/
-    ├── build.gradle           (applies this plugin)
-    └── pom.xml
+    ├── build.gradle              (applies this plugin)
+    ├── pom.xml                   (main build)
+    └── bom.xml                   (optional additional POM)
 ```
 
 ## Setup
@@ -26,7 +27,7 @@ plugins {
 }
 
 mavenModules {
-    app {}
+    app {}  // uses pom.xml by default
 }
 ```
 
@@ -41,14 +42,14 @@ include 'gradle-module', 'maven-module'
 
 Each module named `<name>` gets tasks prefixed with `maven<Name>`:
 
-| Gradle Lifecycle Task | Module Task (e.g. `app`) | Maven Phase |
-|-----------------------|--------------------------|-------------|
-| `clean`               | `mavenAppClean`          | `clean`     |
-| `assemble`            | `mavenAppPackage`        | `package`   |
-| `check`               | `mavenAppVerify`         | `verify`    |
-| `build`               | (inherited)              | `assemble` + `check` |
-| `publishToMavenLocal`* | `mavenAppInstall`        | `install`   |
-| `publish`*             | `mavenAppDeploy`         | `deploy`    |
+| Gradle Lifecycle Task  | Module Task (e.g. `app`) | Maven Phase         |
+|------------------------|--------------------------|---------------------|
+| `clean`                | `mavenAppClean`          | `clean`             |
+| `assemble`             | `mavenAppPackage`        | `package`           |
+| `check`                | `mavenAppVerify`         | `verify`            |
+| `build`                | (inherited)              | `assemble` + `check`|
+| `publishToMavenLocal`* | `mavenAppInstall`        | `install`           |
+| `publish`*             | `mavenAppDeploy`         | `deploy`            |
 
 \* `publishToMavenLocal` and `publish` are only created and wired by this plugin when no other plugin (e.g. `maven-publish`) has already registered them. You can always invoke `maven<Name>Install` or `maven<Name>Deploy` directly.
 
@@ -59,13 +60,13 @@ Additional fine-grained tasks: `maven<Name>Compile`, `maven<Name>Test`
 ```groovy
 mavenModules {
     app {
-        // POM file to use (defaults to pom.xml)
-        pomFile = file('bom.xml')
+        // POM file (defaults to pom.xml in the project directory)
+        pomFile = file('custom-pom.xml')
 
-        // Maven executable (auto-detects mvnw if not set, or falls back to mvn on PATH)
+        // Maven executable (auto-detects mvnw, falls back to mvn on PATH)
         mavenExecutable = '/path/to/mvn'
 
-        // Maven profiles to activate
+        // Maven profiles to activate (-P)
         profiles = ['ci', 'integration']
 
         // System properties passed as -D flags
@@ -75,7 +76,7 @@ mavenModules {
         args = ['--batch-mode', '-X']
 
         // Working directory (defaults to the POM file's parent directory)
-        workingDir = file('myMavenProject')
+        workingDir = file('some/other/dir')
 
         // Environment variables for the Maven process
         environment = ['JAVA_HOME': '/usr/lib/jvm/java-17']
@@ -90,16 +91,16 @@ A single project directory can contain multiple POM files (e.g., a BOM and a mai
 ```groovy
 mavenModules {
     bom {
-        pomFile = file('myMavenProject/bom.xml')
+        pomFile = file('bom.xml')
     }
     app {
-        pomFile = file('myMavenProject/pom.xml')
+        // pomFile defaults to pom.xml
         mustRunAfter 'bom'
     }
 }
 ```
 
-This registers separate task sets (`mavenBom*` and `mavenApp*`). The `mustRunAfter` declaration ensures `bom` tasks complete before `app` tasks when both are requested. Lifecycle tasks like `build` aggregate all modules. The `workingDir` defaults to the POM file's parent directory.
+This registers separate task sets (`mavenBom*` and `mavenApp*`). The `mustRunAfter` declaration ensures `bom` tasks complete before `app` tasks when both are requested. Lifecycle tasks like `build` aggregate all modules.
 
 Run individual module tasks directly:
 
@@ -109,7 +110,7 @@ Run individual module tasks directly:
 
 ## Maven Wrapper Support
 
-The plugin automatically detects `mvnw` (or `mvnw.cmd` on Windows) in the project directory and parent directories. If found, it uses the wrapper instead of the system `mvn`. You can override this by setting `mavenExecutable`.
+The plugin automatically detects `mvnw` (or `mvnw.cmd` on Windows) in the working directory and parent directories. If found, it uses the wrapper instead of the system `mvn`. You can override this by setting `mavenExecutable`.
 
 ## POM Integration
 
