@@ -1,14 +1,22 @@
 plugins {
-    id 'java-gradle-plugin'
-    id 'maven-publish'
+    id 'com.gradle.plugin-publish' version '2.1.0'
+    id 'signing'
 }
 
 group = project.property('group')
 version = project.property('version')
+description = 'Allows a Maven project (with a pom.xml) to participate in a Gradle multi-project build'
+ext.pluginDisplayName = 'Maven Module Plugin'
+ext.javaVersion = 17
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(project.ext.javaVersion)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release.set(project.ext.javaVersion)
 }
 
 repositories {
@@ -35,12 +43,15 @@ testing {
 }
 
 gradlePlugin {
+    website = 'https://github.com/Alipsa/gradle-maven-module-plugin'
+    vcsUrl = 'https://github.com/Alipsa/gradle-maven-module-plugin.git'
     plugins {
         mavenModule {
             id = 'se.alipsa.gradle.maven-module'
             implementationClass = 'se.alipsa.gradle.mavenmodule.MavenModulePlugin'
-            displayName = 'Maven Module Plugin'
-            description = 'Allows a Maven project (with a pom.xml) to participate in a Gradle multi-project build'
+            displayName = "${project.ext.pluginDisplayName}"
+            description = project.description
+            tags.set(['maven', 'multi-project', 'module', 'pom', 'build'])
         }
     }
     testSourceSets(sourceSets.functionalTest)
@@ -50,8 +61,42 @@ tasks.named('check') {
     dependsOn testing.suites.functionalTest
 }
 
+tasks.named('functionalTest') {
+    systemProperty 'testGradleVersion', System.getProperty('testGradleVersion', '')
+}
+
 publishing {
-    repositories {
-        mavenLocal()
+    publications {
+        withType(MavenPublication) {
+            pom {
+                name = project.ext.pluginDisplayName
+                description = project.description
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url = 'https://github.com/Alipsa/gradle-maven-module-plugin/blob/main/LICENSE'
+                    }
+                }
+                developers {
+                    developer {
+                        id = 'perNyfelt'
+                        name = 'Per Nyfelt'
+                    }
+                }
+                scm {
+                    url = 'https://github.com/Alipsa/gradle-maven-module-plugin'
+                    connection = 'scm:git:https://github.com/Alipsa/gradle-maven-module-plugin.git'
+                    developerConnection = 'scm:git:https://github.com/Alipsa/gradle-maven-module-plugin.git'
+                }
+            }
+        }
     }
+}
+
+signing {
+    sign publishing.publications
+}
+
+tasks.withType(Sign).configureEach {
+    enabled = project.hasProperty('signing.keyId')
 }

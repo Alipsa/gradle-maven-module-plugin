@@ -1,5 +1,6 @@
 package se.alipsa.gradle.mavenmodule;
 
+import org.gradle.api.NamedDomainObjectContainer;
 import org.gradle.api.Project;
 import org.gradle.testfixtures.ProjectBuilder;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,7 +21,6 @@ class MavenModulePluginTest {
 
     @BeforeEach
     void setUp() throws IOException {
-        // Create a minimal pom.xml
         File pomFile = new File(projectDir, "pom.xml");
         Files.writeString(pomFile.toPath(), """
                 <?xml version="1.0" encoding="UTF-8"?>
@@ -43,93 +43,68 @@ class MavenModulePluginTest {
 
         project.getPlugins().apply("se.alipsa.gradle.maven-module");
 
-        assertNotNull(project.getExtensions().findByName("mavenModule"));
+        assertNotNull(project.getExtensions().findByName("mavenModules"));
     }
 
     @Test
-    void pluginSetsProjectMetadataFromPom() {
-        Project project = ProjectBuilder.builder()
-                .withProjectDir(projectDir)
-                .build();
+    void pluginRegistersAllMavenTasksForModule() {
+        Project project = createProjectWithModule("app");
 
-        project.getPlugins().apply("se.alipsa.gradle.maven-module");
-
-        assertEquals("com.example", project.getGroup());
-        assertEquals("1.0.0", project.getVersion());
-        assertEquals("A test module", project.getDescription());
-    }
-
-    @Test
-    void pluginRegistersAllMavenTasks() {
-        Project project = ProjectBuilder.builder()
-                .withProjectDir(projectDir)
-                .build();
-
-        project.getPlugins().apply("se.alipsa.gradle.maven-module");
-
-        assertNotNull(project.getTasks().findByName("mavenClean"));
-        assertNotNull(project.getTasks().findByName("mavenCompile"));
-        assertNotNull(project.getTasks().findByName("mavenTest"));
-        assertNotNull(project.getTasks().findByName("mavenPackage"));
-        assertNotNull(project.getTasks().findByName("mavenVerify"));
-        assertNotNull(project.getTasks().findByName("mavenInstall"));
-        assertNotNull(project.getTasks().findByName("mavenDeploy"));
+        assertNotNull(project.getTasks().findByName("mavenAppClean"));
+        assertNotNull(project.getTasks().findByName("mavenAppCompile"));
+        assertNotNull(project.getTasks().findByName("mavenAppTest"));
+        assertNotNull(project.getTasks().findByName("mavenAppPackage"));
+        assertNotNull(project.getTasks().findByName("mavenAppVerify"));
+        assertNotNull(project.getTasks().findByName("mavenAppInstall"));
+        assertNotNull(project.getTasks().findByName("mavenAppDeploy"));
     }
 
     @Test
     void pluginRegistersLifecycleTasks() {
-        Project project = ProjectBuilder.builder()
-                .withProjectDir(projectDir)
-                .build();
+        Project project = createProjectWithModule("app");
 
-        project.getPlugins().apply("se.alipsa.gradle.maven-module");
-
+        // BasePlugin lifecycle tasks are registered eagerly
         assertNotNull(project.getTasks().findByName("clean"));
         assertNotNull(project.getTasks().findByName("assemble"));
         assertNotNull(project.getTasks().findByName("check"));
         assertNotNull(project.getTasks().findByName("build"));
-        assertNotNull(project.getTasks().findByName("publishToMavenLocal"));
-        assertNotNull(project.getTasks().findByName("publish"));
+        // publishToMavenLocal and publish are registered in afterEvaluate
+        // to avoid conflicts with maven-publish; verified in functional tests
     }
 
     @Test
-    void lifecycleTasksDependOnMavenTasks() {
-        Project project = ProjectBuilder.builder()
-                .withProjectDir(projectDir)
-                .build();
-
-        project.getPlugins().apply("se.alipsa.gradle.maven-module");
+    void lifecycleTasksDependOnModuleTasks() {
+        Project project = createProjectWithModule("app");
 
         assertTrue(project.getTasks().getByName("clean")
-                .getDependsOn().stream().anyMatch(d -> d.toString().contains("mavenClean")));
+                .getDependsOn().stream().anyMatch(d -> d.toString().contains("mavenAppClean")));
         assertTrue(project.getTasks().getByName("assemble")
-                .getDependsOn().stream().anyMatch(d -> d.toString().contains("mavenPackage")));
+                .getDependsOn().stream().anyMatch(d -> d.toString().contains("mavenAppPackage")));
         assertTrue(project.getTasks().getByName("check")
-                .getDependsOn().stream().anyMatch(d -> d.toString().contains("mavenVerify")));
+                .getDependsOn().stream().anyMatch(d -> d.toString().contains("mavenAppVerify")));
     }
 
     @Test
-    void extensionDefaultsAreCorrect() {
+    void moduleDefaultsAreCorrect() {
         Project project = ProjectBuilder.builder()
                 .withProjectDir(projectDir)
                 .build();
-
         project.getPlugins().apply("se.alipsa.gradle.maven-module");
 
-        MavenModuleExtension ext = project.getExtensions()
-                .getByType(MavenModuleExtension.class);
+        MavenModule module = getModules(project).create("app");
 
-        assertFalse(ext.getMavenExecutable().isPresent());
-        assertEquals(projectDir, ext.getWorkingDir().get());
-        assertTrue(ext.getProfiles().get().isEmpty());
-        assertTrue(ext.getSystemProperties().get().isEmpty());
-        assertTrue(ext.getArgs().get().isEmpty());
-        assertTrue(ext.getEnvironment().get().isEmpty());
+        assertFalse(module.getMavenExecutable().isPresent());
+        assertEquals(projectDir, module.getWorkingDir().get());
+        assertEquals(new File(projectDir, "pom.xml"), module.getPomFile().get().getAsFile());
+        assertTrue(module.getProfiles().get().isEmpty());
+        assertTrue(module.getSystemProperties().get().isEmpty());
+        assertTrue(module.getArgs().get().isEmpty());
+        assertTrue(module.getEnvironment().get().isEmpty());
+        assertTrue(module.getMustRunAfterModules().isEmpty());
     }
 
     @Test
     void pomParsingHandlesParentInheritance() throws IOException {
-        // Overwrite pom.xml with parent-based version
         File pomFile = new File(projectDir, "pom.xml");
         Files.writeString(pomFile.toPath(), """
                 <?xml version="1.0" encoding="UTF-8"?>
@@ -148,21 +123,19 @@ class MavenModulePluginTest {
                 .withProjectDir(projectDir)
                 .build();
 
-        project.getPlugins().apply("se.alipsa.gradle.maven-module");
+        MavenModulePlugin.PomInfo info = MavenModulePlugin.parsePom(project, pomFile);
 
-        assertEquals("com.example.parent", project.getGroup());
-        assertEquals("2.0.0", project.getVersion());
+        assertNotNull(info);
+        assertEquals("com.example.parent", info.groupId);
+        assertEquals("2.0.0", info.version);
+        assertEquals("child-module", info.artifactId);
     }
 
     @Test
     void commandLineBuildingIncludesProfilesAndProperties() {
-        Project project = ProjectBuilder.builder()
-                .withProjectDir(projectDir)
-                .build();
+        Project project = createProjectWithModule("app");
 
-        project.getPlugins().apply("se.alipsa.gradle.maven-module");
-
-        MavenExecTask task = (MavenExecTask) project.getTasks().getByName("mavenCompile");
+        MavenExecTask task = (MavenExecTask) project.getTasks().getByName("mavenAppCompile");
         task.getProfiles().set(List.of("ci", "integration"));
         task.getSystemProperties().put("skipTests", "true");
         task.getArgs().set(List.of("-X", "--batch-mode"));
@@ -176,5 +149,97 @@ class MavenModulePluginTest {
         assertTrue(cmd.contains("-DskipTests=true"));
         assertTrue(cmd.contains("-X"));
         assertTrue(cmd.contains("--batch-mode"));
+    }
+
+    @Test
+    void customPomFileAddsDashF() throws IOException {
+        File bomFile = new File(projectDir, "bom.xml");
+        Files.writeString(bomFile.toPath(), """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <project xmlns="http://maven.apache.org/POM/4.0.0">
+                    <modelVersion>4.0.0</modelVersion>
+                    <groupId>com.example</groupId>
+                    <artifactId>my-bom</artifactId>
+                    <version>3.0.0</version>
+                    <packaging>pom</packaging>
+                </project>
+                """);
+
+        Project project = ProjectBuilder.builder()
+                .withProjectDir(projectDir)
+                .build();
+        project.getPlugins().apply("se.alipsa.gradle.maven-module");
+
+        MavenModule bom = getModules(project).create("bom");
+        bom.getPomFile().fileValue(bomFile);
+
+        MavenExecTask task = (MavenExecTask) project.getTasks().getByName("mavenBomInstall");
+        List<String> cmd = task.buildCommandLine("mvn");
+
+        assertTrue(cmd.contains("-f"));
+        assertTrue(cmd.contains(bomFile.getAbsolutePath()));
+    }
+
+    @Test
+    void defaultPomFileDoesNotAddDashF() {
+        Project project = createProjectWithModule("app");
+
+        MavenExecTask task = (MavenExecTask) project.getTasks().getByName("mavenAppCompile");
+        List<String> cmd = task.buildCommandLine("mvn");
+
+        assertFalse(cmd.contains("-f"), "Default pom.xml should not add -f flag");
+    }
+
+    @Test
+    void multipleModulesRegisterSeparateTasks() {
+        Project project = ProjectBuilder.builder()
+                .withProjectDir(projectDir)
+                .build();
+        project.getPlugins().apply("se.alipsa.gradle.maven-module");
+
+        NamedDomainObjectContainer<MavenModule> modules = getModules(project);
+        modules.create("bom");
+        modules.create("app");
+
+        assertNotNull(project.getTasks().findByName("mavenBomPackage"));
+        assertNotNull(project.getTasks().findByName("mavenAppPackage"));
+        assertNotNull(project.getTasks().findByName("mavenBomInstall"));
+        assertNotNull(project.getTasks().findByName("mavenAppInstall"));
+    }
+
+    @Test
+    void lifecycleTasksAggregateAllModules() {
+        Project project = ProjectBuilder.builder()
+                .withProjectDir(projectDir)
+                .build();
+        project.getPlugins().apply("se.alipsa.gradle.maven-module");
+
+        NamedDomainObjectContainer<MavenModule> modules = getModules(project);
+        modules.create("bom");
+        modules.create("app");
+
+        // Verify clean depends on both module clean tasks
+        var cleanDeps = project.getTasks().getByName("clean").getDependsOn();
+        assertTrue(cleanDeps.stream().anyMatch(d -> d.toString().contains("mavenBomClean")));
+        assertTrue(cleanDeps.stream().anyMatch(d -> d.toString().contains("mavenAppClean")));
+
+        // Verify assemble depends on both module package tasks
+        var assembleDeps = project.getTasks().getByName("assemble").getDependsOn();
+        assertTrue(assembleDeps.stream().anyMatch(d -> d.toString().contains("mavenBomPackage")));
+        assertTrue(assembleDeps.stream().anyMatch(d -> d.toString().contains("mavenAppPackage")));
+    }
+
+    private Project createProjectWithModule(String moduleName) {
+        Project project = ProjectBuilder.builder()
+                .withProjectDir(projectDir)
+                .build();
+        project.getPlugins().apply("se.alipsa.gradle.maven-module");
+        getModules(project).create(moduleName);
+        return project;
+    }
+
+    @SuppressWarnings("unchecked")
+    private NamedDomainObjectContainer<MavenModule> getModules(Project project) {
+        return (NamedDomainObjectContainer<MavenModule>) project.getExtensions().getByName("mavenModules");
     }
 }

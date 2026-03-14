@@ -2,12 +2,16 @@ package se.alipsa.gradle.mavenmodule;
 
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
+import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.MapProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Input;
+import org.gradle.api.tasks.InputFile;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Optional;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
 import org.gradle.work.DisableCachingByDefault;
 import org.gradle.process.ExecOperations;
@@ -24,17 +28,30 @@ import java.util.List;
 @DisableCachingByDefault(because = "Maven build execution is not cacheable")
 public abstract class MavenExecTask extends DefaultTask {
 
+    /** @return the injected {@link ExecOperations} service */
     @Inject
     protected abstract ExecOperations getExecOperations();
 
     /**
+     * The POM file to use. When it differs from the default {@code pom.xml}
+     * in the working directory, {@code -f} is passed to Maven.
+     * @return the pom file property
+     */
+    @InputFile
+    @Optional
+    @PathSensitive(PathSensitivity.RELATIVE)
+    public abstract RegularFileProperty getPomFile();
+
+    /**
      * The Maven phase to execute (e.g. compile, test, package, verify, install, deploy, clean).
+     * @return the phase property
      */
     @Input
     public abstract Property<String> getPhase();
 
     /**
      * The Maven executable to use.
+     * @return the maven executable property
      */
     @Input
     @Optional
@@ -42,6 +59,7 @@ public abstract class MavenExecTask extends DefaultTask {
 
     /**
      * Maven profiles to activate.
+     * @return the profiles property
      */
     @Input
     @Optional
@@ -49,6 +67,7 @@ public abstract class MavenExecTask extends DefaultTask {
 
     /**
      * System properties to pass to Maven.
+     * @return the system properties
      */
     @Input
     @Optional
@@ -56,6 +75,7 @@ public abstract class MavenExecTask extends DefaultTask {
 
     /**
      * Additional CLI arguments.
+     * @return the additional arguments property
      */
     @Input
     @Optional
@@ -63,16 +83,19 @@ public abstract class MavenExecTask extends DefaultTask {
 
     /**
      * Working directory for Maven execution.
+     * @return the working directory property
      */
     @Internal
     public abstract Property<File> getWorkingDir();
 
     /**
      * Environment variables for the Maven process.
+     * @return the environment variables
      */
     @Internal
     public abstract MapProperty<String, String> getEnvironment();
 
+    /** Executes the configured Maven phase. */
     @TaskAction
     public void exec() {
         File workDir = getWorkingDir().get();
@@ -126,6 +149,16 @@ public abstract class MavenExecTask extends DefaultTask {
     List<String> buildCommandLine(String executable) {
         List<String> cmd = new ArrayList<>();
         cmd.add(executable);
+
+        if (getPomFile().isPresent()) {
+            File pomFile = getPomFile().get().getAsFile();
+            File defaultPom = new File(getWorkingDir().get(), "pom.xml");
+            if (!pomFile.getAbsoluteFile().equals(defaultPom.getAbsoluteFile())) {
+                cmd.add("-f");
+                cmd.add(pomFile.getAbsolutePath());
+            }
+        }
+
         cmd.add(getPhase().get());
 
         if (getProfiles().isPresent() && !getProfiles().get().isEmpty()) {
