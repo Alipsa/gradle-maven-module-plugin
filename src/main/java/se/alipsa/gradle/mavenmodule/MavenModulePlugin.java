@@ -83,6 +83,7 @@ public class MavenModulePlugin implements Plugin<Project> {
                 "Publishes Maven modules using Maven deploy", "publishing");
 
             boolean metadataApplied = metadataAppliedEarly;
+            boolean artifactRegistered = false;
             for (MavenModule module : modules) {
                 String cap = capitalize(module.getName());
 
@@ -101,7 +102,12 @@ public class MavenModulePlugin implements Plugin<Project> {
                         applyPomMetadata(p, pomInfo);
                         metadataApplied = true;
                     }
-                    setupArtifactIntegration(p, module, pomInfo);
+                    // Only the first non-POM module contributes the project artifact
+                    // to the default configuration, to avoid ambiguous resolution
+                    // when multiple modules produce artifacts.
+                    if (!artifactRegistered) {
+                        artifactRegistered = setupArtifactIntegration(p, module, pomInfo);
+                    }
                 }
             }
             wireOrdering(p, modules);
@@ -187,16 +193,16 @@ public class MavenModulePlugin implements Plugin<Project> {
         }
     }
 
-    private void setupArtifactIntegration(Project project, MavenModule module, PomInfo pomInfo) {
+    private boolean setupArtifactIntegration(Project project, MavenModule module, PomInfo pomInfo) {
         String packaging = pomInfo.packaging != null ? pomInfo.packaging : "jar";
         if ("pom".equals(packaging)) {
-            return;
+            return false;
         }
 
         String artifactId = pomInfo.artifactId;
         String version = pomInfo.version;
         if (artifactId == null || version == null) {
-            return;
+            return false;
         }
 
         project.getConfigurations().maybeCreate("default");
@@ -211,6 +217,7 @@ public class MavenModulePlugin implements Plugin<Project> {
             artifact.setType(packaging);
             artifact.builtBy(project.getTasks().named("maven" + cap + "Package"));
         });
+        return true;
     }
 
     static PomInfo parsePom(Project project, File pomFile) {
