@@ -171,7 +171,7 @@ class MavenModulePluginTest {
         project.getPlugins().apply("se.alipsa.gradle.maven-module");
 
         MavenModule bom = getModules(project).create("bom");
-        bom.getPomFile().set(bomFile);
+        bom.getPomFile().fileValue(bomFile);
 
         MavenExecTask task = (MavenExecTask) project.getTasks().getByName("mavenBomInstall");
         List<String> cmd = task.buildCommandLine("mvn");
