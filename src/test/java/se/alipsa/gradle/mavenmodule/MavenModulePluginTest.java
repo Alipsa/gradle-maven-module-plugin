@@ -101,6 +101,10 @@ class MavenModulePluginTest {
         assertTrue(module.getArgs().get().isEmpty());
         assertTrue(module.getEnvironment().get().isEmpty());
         assertTrue(module.getMustRunAfterModules().isEmpty());
+        assertFalse(module.isRunAfterAllSubprojects());
+        assertFalse(module.isRunBeforeAllSubprojects());
+        assertTrue(module.getMustRunAfterSubprojectNames().isEmpty());
+        assertTrue(module.getMustRunBeforeSubprojectNames().isEmpty());
     }
 
     @Test
@@ -227,6 +231,46 @@ class MavenModulePluginTest {
         var assembleDeps = project.getTasks().getByName("assemble").getDependsOn();
         assertTrue(assembleDeps.stream().anyMatch(d -> d.toString().contains("mavenBomPackage")));
         assertTrue(assembleDeps.stream().anyMatch(d -> d.toString().contains("mavenAppPackage")));
+    }
+
+    @Test
+    void mustRunAfterSubprojectsSetsFlag() {
+        Project project = createProjectWithModule("app");
+        MavenModule module = getModules(project).getByName("app");
+
+        module.mustRunAfterSubprojects();
+
+        assertTrue(module.isRunAfterAllSubprojects());
+    }
+
+    @Test
+    void mustRunBeforeSubprojectsSetsFlag() {
+        Project project = createProjectWithModule("app");
+        MavenModule module = getModules(project).getByName("app");
+
+        module.mustRunBeforeSubprojects();
+
+        assertTrue(module.isRunBeforeAllSubprojects());
+    }
+
+    @Test
+    void mustRunAfterSubprojectStoresNames() {
+        Project project = createProjectWithModule("app");
+        MavenModule module = getModules(project).getByName("app");
+
+        module.mustRunAfterSubproject("lib", "core");
+
+        assertEquals(List.of("lib", "core"), module.getMustRunAfterSubprojectNames());
+    }
+
+    @Test
+    void mustRunBeforeSubprojectStoresNames() {
+        Project project = createProjectWithModule("app");
+        MavenModule module = getModules(project).getByName("app");
+
+        module.mustRunBeforeSubproject("integration-tests", "e2e");
+
+        assertEquals(List.of("integration-tests", "e2e"), module.getMustRunBeforeSubprojectNames());
     }
 
     private Project createProjectWithModule(String moduleName) {

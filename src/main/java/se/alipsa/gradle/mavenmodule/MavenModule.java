@@ -17,6 +17,10 @@ import java.util.List;
  *
  * <pre>
  * mavenModules {
+ *     bom {
+ *         pomFile = file('bom.xml')
+ *         mustRunBeforeSubprojects()
+ *     }
  *     app {
  *         pomFile = file('custom-pom.xml')
  *         profiles = ['ci']
@@ -24,6 +28,9 @@ import java.util.List;
  *         args = ['-X']
  *         environment = ['JAVA_HOME': '/usr/lib/jvm/java-17']
  *         mustRunAfter 'bom'
+ *         mustRunAfterSubprojects()
+ *         mustRunAfterSubproject 'lib'
+ *         mustRunBeforeSubproject 'integration-tests'
  *     }
  * }
  * </pre>
@@ -39,6 +46,10 @@ public class MavenModule {
     private final Property<File> workingDir;
     private final MapProperty<String, String> environment;
     private final List<String> mustRunAfterModules = new ArrayList<>();
+    private boolean runAfterAllSubprojects;
+    private boolean runBeforeAllSubprojects;
+    private final List<String> mustRunAfterSubprojectNames = new ArrayList<>();
+    private final List<String> mustRunBeforeSubprojectNames = new ArrayList<>();
 
     /**
      * Creates a new Maven module configuration.
@@ -134,5 +145,59 @@ public class MavenModule {
      */
     public List<String> getMustRunAfterModules() {
         return Collections.unmodifiableList(mustRunAfterModules);
+    }
+
+    /**
+     * Declares that all tasks of this module must run after all lifecycle tasks
+     * of every Gradle subproject (clean, assemble, check, build, jar, publishToMavenLocal, publish).
+     */
+    public void mustRunAfterSubprojects() {
+        runAfterAllSubprojects = true;
+    }
+
+    /**
+     * Declares that all lifecycle tasks of every Gradle subproject must run after
+     * all tasks of this module.
+     */
+    public void mustRunBeforeSubprojects() {
+        runBeforeAllSubprojects = true;
+    }
+
+    /**
+     * Declares that all tasks of this module must run after all lifecycle tasks
+     * of the specified Gradle subprojects.
+     * @param subprojects the names or paths of subprojects that must complete first
+     */
+    public void mustRunAfterSubproject(String... subprojects) {
+        Collections.addAll(mustRunAfterSubprojectNames, subprojects);
+    }
+
+    /**
+     * Declares that all lifecycle tasks of the specified Gradle subprojects must
+     * run after all tasks of this module.
+     * @param subprojects the names or paths of subprojects that must wait
+     */
+    public void mustRunBeforeSubproject(String... subprojects) {
+        Collections.addAll(mustRunBeforeSubprojectNames, subprojects);
+    }
+
+    /** @return true if this module must run after all subprojects */
+    public boolean isRunAfterAllSubprojects() {
+        return runAfterAllSubprojects;
+    }
+
+    /** @return true if this module must run before all subprojects */
+    public boolean isRunBeforeAllSubprojects() {
+        return runBeforeAllSubprojects;
+    }
+
+    /** @return the list of subproject names this module must run after */
+    public List<String> getMustRunAfterSubprojectNames() {
+        return Collections.unmodifiableList(mustRunAfterSubprojectNames);
+    }
+
+    /** @return the list of subproject names this module must run before */
+    public List<String> getMustRunBeforeSubprojectNames() {
+        return Collections.unmodifiableList(mustRunBeforeSubprojectNames);
     }
 }

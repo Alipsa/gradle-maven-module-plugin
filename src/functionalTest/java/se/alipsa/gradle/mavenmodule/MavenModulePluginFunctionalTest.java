@@ -278,6 +278,190 @@ class MavenModulePluginFunctionalTest {
         assertTrue(output.contains("PROJECT_DESCRIPTION=A test module description"));
     }
 
+    @Test
+    void mustRunAfterSubprojectsOrdersMavenTasksAfterSubprojectTasks() throws IOException {
+        writeFile("settings.gradle", """
+                rootProject.name = 'test-root'
+                include 'lib'
+                """);
+
+        writeFile("build.gradle", """
+                plugins {
+                    id 'se.alipsa.gradle.maven-module'
+                }
+                mavenModules {
+                    app {
+                        mustRunAfterSubprojects()
+                    }
+                }
+                """);
+
+        writeFile("lib/build.gradle", """
+                plugins {
+                    id 'java'
+                }
+                """);
+
+        writeFile("lib/src/main/java/com/example/Lib.java", """
+                package com.example;
+                public class Lib {}
+                """);
+
+        BuildResult result = createRunner("assemble")
+                .build();
+
+        assertEquals(TaskOutcome.SUCCESS, result.task(":mavenAppPackage").getOutcome());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":lib:jar").getOutcome());
+
+        String output = result.getOutput();
+        int libJar = output.indexOf(":lib:jar");
+        int mavenPackage = output.indexOf(":mavenAppPackage");
+        assertTrue(libJar >= 0 && mavenPackage >= 0, "Both tasks should appear in output");
+        assertTrue(libJar < mavenPackage,
+                "lib:jar should run before mavenAppPackage");
+    }
+
+    @Test
+    void mustRunBeforeSubprojectsOrdersMavenTasksBeforeSubprojectTasks() throws IOException {
+        writeFile("settings.gradle", """
+                rootProject.name = 'test-root'
+                include 'lib'
+                """);
+
+        writeFile("build.gradle", """
+                plugins {
+                    id 'se.alipsa.gradle.maven-module'
+                }
+                mavenModules {
+                    app {
+                        mustRunBeforeSubprojects()
+                    }
+                }
+                """);
+
+        writeFile("lib/build.gradle", """
+                plugins {
+                    id 'java'
+                }
+                """);
+
+        writeFile("lib/src/main/java/com/example/Lib.java", """
+                package com.example;
+                public class Lib {}
+                """);
+
+        BuildResult result = createRunner("assemble")
+                .build();
+
+        assertEquals(TaskOutcome.SUCCESS, result.task(":mavenAppPackage").getOutcome());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":lib:jar").getOutcome());
+
+        String output = result.getOutput();
+        int mavenPackage = output.indexOf(":mavenAppPackage");
+        int libJar = output.indexOf(":lib:jar");
+        assertTrue(mavenPackage >= 0 && libJar >= 0, "Both tasks should appear in output");
+        assertTrue(mavenPackage < libJar,
+                "mavenAppPackage should run before lib:jar");
+    }
+
+    @Test
+    void mustRunAfterSubprojectOrdersAfterNamedSubproject() throws IOException {
+        writeFile("settings.gradle", """
+                rootProject.name = 'test-root'
+                include 'lib'
+                include 'other'
+                """);
+
+        writeFile("build.gradle", """
+                plugins {
+                    id 'se.alipsa.gradle.maven-module'
+                }
+                mavenModules {
+                    app {
+                        mustRunAfterSubproject 'lib'
+                    }
+                }
+                """);
+
+        writeFile("lib/build.gradle", """
+                plugins {
+                    id 'java'
+                }
+                """);
+
+        writeFile("lib/src/main/java/com/example/Lib.java", """
+                package com.example;
+                public class Lib {}
+                """);
+
+        writeFile("other/build.gradle", """
+                plugins {
+                    id 'java'
+                }
+                """);
+
+        writeFile("other/src/main/java/com/example/Other.java", """
+                package com.example;
+                public class Other {}
+                """);
+
+        BuildResult result = createRunner("assemble")
+                .build();
+
+        assertEquals(TaskOutcome.SUCCESS, result.task(":mavenAppPackage").getOutcome());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":lib:jar").getOutcome());
+
+        String output = result.getOutput();
+        int libJar = output.indexOf(":lib:jar");
+        int mavenPackage = output.indexOf(":mavenAppPackage");
+        assertTrue(libJar >= 0 && mavenPackage >= 0, "Both tasks should appear in output");
+        assertTrue(libJar < mavenPackage,
+                "lib:jar should run before mavenAppPackage");
+    }
+
+    @Test
+    void mustRunBeforeSubprojectOrdersBeforeNamedSubproject() throws IOException {
+        writeFile("settings.gradle", """
+                rootProject.name = 'test-root'
+                include 'lib'
+                """);
+
+        writeFile("build.gradle", """
+                plugins {
+                    id 'se.alipsa.gradle.maven-module'
+                }
+                mavenModules {
+                    app {
+                        mustRunBeforeSubproject 'lib'
+                    }
+                }
+                """);
+
+        writeFile("lib/build.gradle", """
+                plugins {
+                    id 'java'
+                }
+                """);
+
+        writeFile("lib/src/main/java/com/example/Lib.java", """
+                package com.example;
+                public class Lib {}
+                """);
+
+        BuildResult result = createRunner("assemble")
+                .build();
+
+        assertEquals(TaskOutcome.SUCCESS, result.task(":mavenAppPackage").getOutcome());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":lib:jar").getOutcome());
+
+        String output = result.getOutput();
+        int mavenPackage = output.indexOf(":mavenAppPackage");
+        int libJar = output.indexOf(":lib:jar");
+        assertTrue(mavenPackage >= 0 && libJar >= 0, "Both tasks should appear in output");
+        assertTrue(mavenPackage < libJar,
+                "mavenAppPackage should run before lib:jar");
+    }
+
     private GradleRunner createRunner(String... arguments) {
         GradleRunner runner = GradleRunner.create()
                 .withProjectDir(projectDir)

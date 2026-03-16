@@ -21,6 +21,7 @@ import javax.inject.Inject;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * A Gradle task that executes a Maven phase by invoking the Maven CLI.
@@ -142,8 +143,79 @@ public abstract class MavenExecTask extends DefaultTask {
             dir = dir.getParentFile();
         }
 
-        // Fall back to system mvn
+        // Try to find mvn on the system PATH
+        String found = findOnPath("mvn");
+        if (found != null) {
+            return found;
+        }
+
+        // Try resolving via login shell (handles sdkman, nvm-style PATH setup
+        // where PATH is configured in shell init scripts not inherited by the daemon)
+        found = resolveViaShell("mvn");
+        if (found != null) {
+            return found;
+        }
+
+        // Fall back to bare mvn
         return "mvn";
+    }
+
+    private String findOnPath(String executable) {
+        String path = System.getenv("PATH");
+        if (path == null) return null;
+        boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
+        for (String dir : path.split(File.pathSeparator)) {
+            File file = new File(dir, executable);
+            if (file.isFile() && file.canExecute()) {
+                return file.getAbsolutePath();
+            }
+            if (isWindows) {
+                for (String ext : new String[]{".cmd", ".bat", ".exe"}) {
+                    file = new File(dir, executable + ext);
+                    if (file.isFile()) {
+                        return file.getAbsolutePath();
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private String resolveViaShell(String executable) {
+        try {
+            boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
+            ProcessBuilder pb;
+            if (isWindows) {
+                pb = new ProcessBuilder("cmd", "/c", "where", executable);
+            } else {
+                String shell = System.getenv("SHELL");
+                if (shell == null || shell.isEmpty()) {
+                    shell = "/bin/sh";
+                }
+                // Use -l (login) and -i (interactive) to source all init files
+                // (e.g. .bashrc, .zshrc) where tools like sdkman set up PATH
+                pb = new ProcessBuilder(shell, "-lic", "command -v " + executable);
+            }
+            pb.redirectError(ProcessBuilder.Redirect.DISCARD);
+            Process process = pb.start();
+            String output = new String(process.getInputStream().readAllBytes()).trim();
+            boolean exited = process.waitFor(5, TimeUnit.SECONDS);
+            if (!exited) {
+                process.destroyForcibly();
+                return null;
+            }
+            if (process.exitValue() == 0 && !output.isEmpty()) {
+                // Filter for lines that are actual file paths (skip shell noise)
+                return output.lines()
+                    .map(String::trim)
+                    .filter(line -> !line.isEmpty() && new File(line).isFile())
+                    .findFirst()
+                    .orElse(null);
+            }
+        } catch (Exception e) {
+            getLogger().debug("Failed to resolve {} via shell: {}", executable, e.getMessage());
+        }
+        return null;
     }
 
     List<String> buildCommandLine(String executable) {

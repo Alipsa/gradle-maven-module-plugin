@@ -22,6 +22,10 @@ import java.util.Map;
  */
 public class MavenModulePlugin implements Plugin<Project> {
 
+    private static final String[] SUBPROJECT_LIFECYCLE_TASKS = {
+        "clean", "assemble", "check", "build", "jar", "publishToMavenLocal", "publish"
+    };
+
     private static final String[][] PHASES = {
         {"Clean", "clean"},
         {"Compile", "compile"},
@@ -112,6 +116,12 @@ public class MavenModulePlugin implements Plugin<Project> {
             }
             wireOrdering(p, modules);
         });
+
+        // Wire subproject ordering after all projects are evaluated,
+        // so that subproject tasks are fully registered.
+        project.getGradle().projectsEvaluated(gradle ->
+            wireSubprojectOrdering(project, modules)
+        );
     }
 
     private void registerModuleTasks(Project project, MavenModule module) {
@@ -177,6 +187,71 @@ public class MavenModulePlugin implements Plugin<Project> {
                         }
                     });
                 }
+            }
+        }
+    }
+
+    private void wireSubprojectOrdering(Project project,
+                                         NamedDomainObjectContainer<MavenModule> modules) {
+        for (MavenModule module : modules) {
+            String prefix = "maven" + capitalize(module.getName());
+
+            if (module.isRunAfterAllSubprojects()) {
+                for (Project sub : project.getSubprojects()) {
+                    wireAfterSubproject(project, prefix, sub);
+                }
+            }
+
+            if (module.isRunBeforeAllSubprojects()) {
+                for (Project sub : project.getSubprojects()) {
+                    wireBeforeSubproject(project, prefix, sub);
+                }
+            }
+
+            for (String subName : module.getMustRunAfterSubprojectNames()) {
+                Project sub = project.findProject(subName);
+                if (sub == null) {
+                    project.getLogger().warn(
+                        "mavenModules: '{}' declares mustRunAfterSubproject '{}' which does not exist",
+                        module.getName(), subName);
+                    continue;
+                }
+                wireAfterSubproject(project, prefix, sub);
+            }
+
+            for (String subName : module.getMustRunBeforeSubprojectNames()) {
+                Project sub = project.findProject(subName);
+                if (sub == null) {
+                    project.getLogger().warn(
+                        "mavenModules: '{}' declares mustRunBeforeSubproject '{}' which does not exist",
+                        module.getName(), subName);
+                    continue;
+                }
+                wireBeforeSubproject(project, prefix, sub);
+            }
+        }
+    }
+
+    private void wireAfterSubproject(Project project, String prefix, Project sub) {
+        for (String[] phaseEntry : PHASES) {
+            project.getTasks().named(prefix + phaseEntry[0], task -> {
+                for (String lifecycleTask : SUBPROJECT_LIFECYCLE_TASKS) {
+                    if (sub.getTasks().getNames().contains(lifecycleTask)) {
+                        task.mustRunAfter(sub.getTasks().named(lifecycleTask));
+                    }
+                }
+            });
+        }
+    }
+
+    private void wireBeforeSubproject(Project project, String prefix, Project sub) {
+        for (String lifecycleTask : SUBPROJECT_LIFECYCLE_TASKS) {
+            if (sub.getTasks().getNames().contains(lifecycleTask)) {
+                sub.getTasks().named(lifecycleTask, task -> {
+                    for (String[] phaseEntry : PHASES) {
+                        task.mustRunAfter(project.getTasks().named(prefix + phaseEntry[0]));
+                    }
+                });
             }
         }
     }
