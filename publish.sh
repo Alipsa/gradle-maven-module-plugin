@@ -10,4 +10,4 @@ if command -v jdk17 &> /dev/null; then
   export PATH="$JAVA_HOME/bin:$PATH"
 fi
 java -version
-#./gradlew clean build publishPlugins
+./gradlew clean build publishPlugins
