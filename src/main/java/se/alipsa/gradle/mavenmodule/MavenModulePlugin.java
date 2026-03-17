@@ -56,7 +56,7 @@ public class MavenModulePlugin implements Plugin<Project> {
         }
         final boolean metadataAppliedEarly = earlyMetadata;
 
-        NamedDomainObjectContainer<MavenModule> modules = project.container(
+        NamedDomainObjectContainer<MavenModule> modules = project.getObjects().domainObjectContainer(
             MavenModule.class,
             name -> project.getObjects().newInstance(MavenModule.class, name)
         );
