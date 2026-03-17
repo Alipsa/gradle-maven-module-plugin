@@ -17,6 +17,7 @@ java {
 
 tasks.withType(JavaCompile).configureEach {
     options.release.set(project.ext.javaVersion)
+    options.compilerArgs.add('-Xlint:deprecation')
 }
 
 repositories {
@@ -52,6 +53,12 @@ gradlePlugin {
             displayName = "${project.ext.pluginDisplayName}"
             description = project.description
             tags.set(['maven', 'multi-project', 'module', 'pom', 'build'])
+
+            compatibility(it) {
+                features {
+                    configurationCache = true
+                }
+            }
         }
     }
     testSourceSets(sourceSets.functionalTest)

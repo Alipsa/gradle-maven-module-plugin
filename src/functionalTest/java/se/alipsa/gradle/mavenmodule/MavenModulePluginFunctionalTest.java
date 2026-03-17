@@ -420,6 +420,21 @@ class MavenModulePluginFunctionalTest {
     }
 
     @Test
+    void configurationCacheIsSupported() {
+        // First run: stores the configuration cache entry
+        BuildResult first = createRunner("--configuration-cache", "build")
+                .build();
+        assertTrue(first.getOutput().contains("Configuration cache entry stored"),
+                "First run should store a configuration cache entry");
+
+        // Second run: must reuse the cached configuration
+        BuildResult second = createRunner("--configuration-cache", "build")
+                .build();
+        assertTrue(second.getOutput().contains("Reusing configuration cache"),
+                "Second run should reuse the configuration cache entry");
+    }
+
+    @Test
     void mustRunBeforeSubprojectOrdersBeforeNamedSubproject() throws IOException {
         writeFile("settings.gradle", """
                 rootProject.name = 'test-root'
