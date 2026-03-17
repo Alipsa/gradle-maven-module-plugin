@@ -23,7 +23,7 @@ Apply the plugin in the Maven subproject's `build.gradle` and declare your modul
 
 ```groovy
 plugins {
-    id 'se.alipsa.gradle.maven-module' version '0.1.0-SNAPSHOT'
+    id 'se.alipsa.gradle.maven-module' version '0.1.0'
 }
 
 mavenModules {
@@ -42,14 +42,14 @@ include 'gradle-module', 'maven-module'
 
 Each module named `<name>` gets tasks prefixed with `maven<Name>`:
 
-| Gradle Lifecycle Task  | Module Task (e.g. `app`) | Maven Phase         |
-|------------------------|--------------------------|---------------------|
-| `clean`                | `mavenAppClean`          | `clean`             |
-| `assemble`             | `mavenAppPackage`        | `package`           |
-| `check`                | `mavenAppVerify`         | `verify`            |
-| `build`                | (inherited)              | `assemble` + `check`|
-| `publishToMavenLocal`* | `mavenAppInstall`        | `install`           |
-| `publish`*             | `mavenAppDeploy`         | `deploy`            |
+| Gradle Lifecycle Task  | Module Task (e.g. `app`) | Maven Phase          |
+|------------------------|--------------------------|----------------------|
+| `clean`                | `mavenAppClean`          | `clean`              |
+| `assemble`             | `mavenAppPackage`        | `package`            |
+| `check`                | `mavenAppVerify`         | `verify`             |
+| `build`                | (inherited)              | `assemble` + `check` |
+| `publishToMavenLocal`* | `mavenAppInstall`        | `install`            |
+| `publish`*             | `mavenAppDeploy`         | `deploy`             |
 
 \* `publishToMavenLocal` and `publish` are only created and wired by this plugin when no other plugin (e.g. `maven-publish`) has already registered them. You can always invoke `maven<Name>Install` or `maven<Name>Deploy` directly.
 
@@ -107,6 +107,61 @@ Run individual module tasks directly:
 ```bash
 ./gradlew mavenBomInstall mavenAppVerify
 ```
+
+## Subproject Ordering
+
+When Maven modules need to run before or after other Gradle subprojects, the plugin provides ordering methods that wire `mustRunAfter` constraints against standard lifecycle tasks (`clean`, `assemble`, `check`, `build`, `jar`, `publishToMavenLocal`, `publish`).
+
+### Run after all subprojects
+
+Use `mustRunAfterSubprojects()` when a Maven module depends on artifacts produced by other Gradle subprojects:
+
+```groovy
+mavenModules {
+    app {
+        mustRunAfterSubprojects()
+    }
+}
+```
+
+### Run before all subprojects
+
+Use `mustRunBeforeSubprojects()` when other Gradle subprojects depend on this Maven module (e.g., a BOM or shared library):
+
+```groovy
+mavenModules {
+    bom {
+        pomFile = file('bom.xml')
+        mustRunBeforeSubprojects()
+    }
+}
+```
+
+### Run after specific subprojects
+
+Use `mustRunAfterSubproject` to order the Maven module after one or more named subprojects:
+
+```groovy
+mavenModules {
+    app {
+        mustRunAfterSubproject 'lib', 'common'
+    }
+}
+```
+
+### Run before specific subprojects
+
+Use `mustRunBeforeSubproject` to ensure specific subprojects run after this Maven module:
+
+```groovy
+mavenModules {
+    app {
+        mustRunBeforeSubproject 'integration-tests'
+    }
+}
+```
+
+These can be combined freely with each other and with the intra-container `mustRunAfter` ordering.
 
 ## Maven Wrapper Support
 
