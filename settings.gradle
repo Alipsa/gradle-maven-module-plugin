@@ -1,1 +1,8 @@
+pluginManagement {
+    repositories {
+        //mavenLocal()
+        gradlePluginPortal()
+    }
+}
+
 rootProject.name = 'gradle-maven-module-plugin'

@@ -1,6 +1,10 @@
 # gradle-maven-module-plugin release history
 
-## v0.1.1 -  2026-03-18
+## v0.1.2 - In progress
+- Changed maven central coordinates to se.alipsa.gradle.maven-module:se.alipsa.gradle.maven-module.gradle.plugin:version
+- Publish the plugin to Maven Central on every release in additional to Plugin Portal.
+
+## v0.1.1 - 2026-03-18
 - MavenModulePlugin.java:59 — Replaced deprecated project.container(Class, Factory) with project.getObjects().domainObjectContainer(Class, Factory) (the non-deprecated   
   Gradle 9.4 API)
 - build.gradle — Added -Xlint:deprecation to compiler args so deprecation warnings surface explicitly in future builds

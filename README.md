@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Alipsa/gradle-maven-module-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/Alipsa/gradle-maven-module-plugin/actions/workflows/ci.yml)
 [![Java](https://img.shields.io/badge/Java-17+-blue)](https://docs.oracle.com/en/java/javase/17/)
-[![Javadoc](https://javadoc.io/badge2/se.alipsa.gradle/gradle-maven-module-plugin/javadoc.svg)](https://javadoc.io/doc/se.alipsa.gradle/gradle-maven-module-plugin)
+[![Javadoc](https://javadoc.io/badge2/se.alipsa.gradle.maven-module/se.alipsa.gradle.maven-module.gradle.plugin/javadoc.svg)](https://javadoc.io/doc/se.alipsa.gradle.maven-module/se.alipsa.gradle.maven-module.gradle.plugin)
 
 A Gradle plugin that allows Maven projects (with `pom.xml`) to participate in a Gradle multi-project build. It maps Gradle lifecycle tasks to Maven phases so that standard Gradle commands work seamlessly with Maven subprojects.
 
@@ -27,7 +27,7 @@ Apply the plugin in the Maven subproject's `build.gradle` and declare your modul
 
 ```groovy
 plugins {
-    id 'se.alipsa.gradle.maven-module' version '0.1.1'
+    id 'se.alipsa.gradle.maven-module' version '0.1.2'
 }
 
 mavenModules {

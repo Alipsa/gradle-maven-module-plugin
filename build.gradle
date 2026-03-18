@@ -1,6 +1,7 @@
 plugins {
     id 'com.gradle.plugin-publish' version '2.1.0'
     id 'signing'
+    id 'se.alipsa.nexus-release-plugin' version '2.1.2'
 }
 
 group = project.property('group')
@@ -9,10 +10,16 @@ description = 'Allows a Maven project (with a pom.xml) to participate in a Gradl
 ext.pluginDisplayName = 'Maven Module Plugin'
 ext.javaVersion = 17
 
+base {
+    archivesName = 'se.alipsa.gradle.maven-module.gradle.plugin'
+}
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(project.ext.javaVersion)
     }
+    withSourcesJar()
+    withJavadocJar()
 }
 
 tasks.withType(JavaCompile).configureEach {
@@ -74,10 +81,14 @@ tasks.named('functionalTest') {
 
 publishing {
     publications {
-        withType(MavenPublication) {
+        mavenCentral(MavenPublication) {
+            groupId = 'se.alipsa.gradle.maven-module'
+            artifactId = 'se.alipsa.gradle.maven-module.gradle.plugin'
+            from components.java
             pom {
                 name = project.ext.pluginDisplayName
                 description = project.description
+                url = 'https://github.com/Alipsa/gradle-maven-module-plugin'
                 licenses {
                     license {
                         name = 'MIT License'
@@ -100,10 +111,34 @@ publishing {
     }
 }
 
-signing {
-    sign publishing.publications
+// Disable the default pluginMaven and marker publication tasks to avoid conflicts with mavenCentral
+afterEvaluate {
+    tasks.withType(org.gradle.api.publish.maven.tasks.PublishToMavenLocal).configureEach { task ->
+        if (task.name.contains('PluginMaven') || task.name.contains('PluginMarkerMaven')) {
+            task.enabled = false
+        }
+    }
+    tasks.withType(org.gradle.api.publish.maven.tasks.PublishToMavenRepository).configureEach { task ->
+        if (task.name.contains('PluginMaven') || task.name.contains('PluginMarkerMaven')) {
+            task.enabled = false
+        }
+    }
+    // Also disable the signing tasks for pluginMaven and marker
+    tasks.withType(org.gradle.plugins.signing.Sign).configureEach { task ->
+        if (task.name.contains('PluginMaven') || task.name.contains('PluginMarkerMaven')) {
+            task.enabled = false
+        }
+    }
 }
 
-tasks.withType(Sign).configureEach {
-    enabled = project.hasProperty('signing.keyId')
+signing {
+    if (project.properties['signing.keyId'] != null) {
+        sign publishing.publications.mavenCentral
+    }
+}
+
+nexusReleasePlugin {
+    userName = project.ext.properties.sonatypeUsername
+    password = project.ext.properties.sonatypePassword
+    mavenPublication = publishing.publications.mavenCentral
 }
