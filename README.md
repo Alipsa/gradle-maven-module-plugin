@@ -27,7 +27,7 @@ Apply the plugin in the Maven subproject's `build.gradle` and declare your modul
 
 ```groovy
 plugins {
-    id 'se.alipsa.gradle.maven-module' version '0.1.0'
+    id 'se.alipsa.gradle.maven-module' version '0.1.1'
 }
 
 mavenModules {
