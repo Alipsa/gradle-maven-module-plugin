@@ -27,7 +27,7 @@ Apply the plugin in the Maven subproject's `build.gradle` and declare your modul
 
 ```groovy
 plugins {
-    id 'se.alipsa.gradle.maven-module' version '0.1.2'
+    id 'se.alipsa.gradle.maven-module' version '0.2.0'
 }
 
 mavenModules {
@@ -167,6 +167,31 @@ mavenModules {
 
 These can be combined freely with each other and with the intra-container `mustRunAfter` ordering.
 
+### Depend on published subproject artifacts
+
+When a Maven module depends on artifacts produced by Gradle subprojects, use `dependsOnPublishedSubproject` to ensure those artifacts are published to the local Maven repository (`~/.m2/repository`) before Maven runs. Unlike the `mustRunAfter` methods which only control ordering, this creates a hard `dependsOn` relationship — the subprojects' `publishToMavenLocal` tasks **will** execute automatically.
+
+```groovy
+mavenModules {
+    app {
+        // Publish specific subprojects to local Maven repo before Maven runs
+        dependsOnPublishedSubproject 'lib', 'common'
+    }
+}
+```
+
+To depend on all subprojects:
+
+```groovy
+mavenModules {
+    app {
+        dependsOnAllPublishedSubprojects()
+    }
+}
+```
+
+**Note:** The specified subprojects must have the `maven-publish` plugin applied (which provides the `publishToMavenLocal` task). The plugin will warn if a subproject lacks this task.
+
 ## Maven Wrapper Support
 
 The plugin automatically detects `mvnw` (or `mvnw.cmd` on Windows) in the working directory and parent directories. If found, it uses the wrapper instead of the system `mvn`. You can override this by setting `mavenExecutable`.
@@ -184,6 +209,23 @@ dependencies {
     implementation project(':maven-module')
 }
 ```
+## Plugin portal and Maven Central Publications
+This plugin is published to both the Gradle Plugin Portal and Maven Central. The plugin coordinates are:
+- Gradle Plugin Portal: `se.alipsa.gradle.maven-module` (use `id 'se.alipsa.gradle.maven-module' version '0.2.0'` in `build.gradle`)
+- Maven Central: 
+  ```xml
+  <groupId>se.alipsa.gradle.maven-module</groupId>
+  <artifactId>se.alipsa.gradle.maven-module.gradle.plugin</artifactId>
+  ```
+The reason for the different artifactId in Maven Central is to avoid confusion with the plugin ID and to follow a common convention for Gradle plugins published to Maven Central. It also means that if the pluginPortal is unavailable to you for some reason you can easily switch to the Maven Central artifact by adding the following to your settings.gradle:
+```groovy
+pluginManagement {
+  repositories {
+    mavenCentral()
+  }
+}
+```
+No changes to the plugin id in build.gradle are needed.
 
 ## Building the Plugin
 

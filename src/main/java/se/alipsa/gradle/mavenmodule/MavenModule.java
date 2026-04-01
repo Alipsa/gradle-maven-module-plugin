@@ -1,5 +1,6 @@
 package se.alipsa.gradle.mavenmodule;
 
+import org.gradle.api.Action;
 import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.ListProperty;
@@ -50,6 +51,10 @@ public class MavenModule {
     private boolean runBeforeAllSubprojects;
     private final List<String> mustRunAfterSubprojectNames = new ArrayList<>();
     private final List<String> mustRunBeforeSubprojectNames = new ArrayList<>();
+    private boolean dependsOnAllPublished;
+    private final List<String> dependsOnPublishedSubprojectNames = new ArrayList<>();
+    private final List<String> excludedPublishedSubprojectNames = new ArrayList<>();
+    private final List<String> excludedPublishedSubprojectGroups = new ArrayList<>();
 
     /**
      * Creates a new Maven module configuration.
@@ -199,5 +204,67 @@ public class MavenModule {
     /** @return the list of subproject names this module must run before */
     public List<String> getMustRunBeforeSubprojectNames() {
         return Collections.unmodifiableList(mustRunBeforeSubprojectNames);
+    }
+
+    /**
+     * Declares that Maven build phases of this module depend on
+     * {@code publishToMavenLocal} of the specified Gradle subprojects.
+     * This ensures the subprojects' artifacts are available in the local
+     * Maven repository before Maven tries to resolve them.
+     * @param subprojects the names or paths of subprojects whose artifacts are needed
+     */
+    public void dependsOnPublishedSubproject(String... subprojects) {
+        Collections.addAll(dependsOnPublishedSubprojectNames, subprojects);
+    }
+
+    /**
+     * Declares that Maven build phases of this module depend on
+     * {@code publishToMavenLocal} of every Gradle subproject.
+     * This ensures all subproject artifacts are available in the local
+     * Maven repository before Maven tries to resolve them.
+     */
+    public void dependsOnAllPublishedSubprojects() {
+        dependsOnAllPublished = true;
+    }
+
+    /**
+     * Declares that Maven build phases of this module depend on
+     * {@code publishToMavenLocal} of every Gradle subproject, with exclusions.
+     *
+     * <pre>
+     * dependsOnAllPublishedSubprojects {
+     *     exclude 'matrix-examples:candles'
+     *     exclude 'matrix-examples:HousePrices'
+     * }
+     * </pre>
+     *
+     * @param action configuration action to specify exclusions
+     */
+    public void dependsOnAllPublishedSubprojects(Action<PublishedSubprojectSpec> action) {
+        dependsOnAllPublished = true;
+        PublishedSubprojectSpec spec = new PublishedSubprojectSpec();
+        action.execute(spec);
+        excludedPublishedSubprojectNames.addAll(spec.getExcludes());
+        excludedPublishedSubprojectGroups.addAll(spec.getExcludeGroups());
+    }
+
+    /** @return true if this module depends on all subprojects' publishToMavenLocal */
+    public boolean isDependsOnAllPublishedSubprojects() {
+        return dependsOnAllPublished;
+    }
+
+    /** @return the list of subproject names whose publishToMavenLocal this module depends on */
+    public List<String> getDependsOnPublishedSubprojectNames() {
+        return Collections.unmodifiableList(dependsOnPublishedSubprojectNames);
+    }
+
+    /** @return the list of subproject names/paths excluded from dependsOnAllPublishedSubprojects */
+    public List<String> getExcludedPublishedSubprojectNames() {
+        return Collections.unmodifiableList(excludedPublishedSubprojectNames);
+    }
+
+    /** @return the list of group prefixes excluded from dependsOnAllPublishedSubprojects */
+    public List<String> getExcludedPublishedSubprojectGroups() {
+        return Collections.unmodifiableList(excludedPublishedSubprojectGroups);
     }
 }

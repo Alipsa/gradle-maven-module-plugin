@@ -229,6 +229,25 @@ public class MavenModulePlugin implements Plugin<Project> {
                 }
                 wireBeforeSubproject(project, prefix, sub);
             }
+
+            if (module.isDependsOnAllPublishedSubprojects()) {
+                for (Project sub : project.getSubprojects()) {
+                    if (!isExcludedPublishedSubproject(module, sub)) {
+                        wireDependsOnPublished(project, prefix, sub);
+                    }
+                }
+            }
+
+            for (String subName : module.getDependsOnPublishedSubprojectNames()) {
+                Project sub = project.findProject(subName);
+                if (sub == null) {
+                    project.getLogger().warn(
+                        "mavenModules: '{}' declares dependsOnPublishedSubproject '{}' which does not exist",
+                        module.getName(), subName);
+                    continue;
+                }
+                wireDependsOnPublished(project, prefix, sub);
+            }
         }
     }
 
@@ -253,6 +272,48 @@ public class MavenModulePlugin implements Plugin<Project> {
                     }
                 });
             }
+        }
+    }
+
+    private boolean isExcludedPublishedSubproject(MavenModule module, Project sub) {
+        String path = sub.getPath();
+        String pathNoColon = path.startsWith(":") ? path.substring(1) : path;
+        String name = sub.getName();
+
+        for (String exclude : module.getExcludedPublishedSubprojectNames()) {
+            String e = exclude.startsWith(":") ? exclude.substring(1) : exclude;
+            if (e.equals(pathNoColon) || e.equals(name)) {
+                return true;
+            }
+        }
+
+        for (String group : module.getExcludedPublishedSubprojectGroups()) {
+            String g = group.startsWith(":") ? group.substring(1) : group;
+            // Match subprojects whose path starts with the group prefix
+            if (pathNoColon.startsWith(g + ":") || pathNoColon.equals(g)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void wireDependsOnPublished(Project project, String prefix, Project sub) {
+        if (!sub.getTasks().getNames().contains("publishToMavenLocal")) {
+            project.getLogger().warn(
+                "mavenModules: subproject '{}' does not have a publishToMavenLocal task. " +
+                "Apply the 'maven-publish' plugin to that subproject.",
+                sub.getName());
+            return;
+        }
+        // Maven build phases (all except clean) depend on the subproject's publishToMavenLocal
+        for (String[] phaseEntry : PHASES) {
+            if ("clean".equals(phaseEntry[1])) {
+                continue;
+            }
+            project.getTasks().named(prefix + phaseEntry[0], task ->
+                task.dependsOn(sub.getTasks().named("publishToMavenLocal"))
+            );
         }
     }
 

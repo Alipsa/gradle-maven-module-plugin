@@ -111,7 +111,10 @@ publishing {
     }
 }
 
-// Disable the default pluginMaven and marker publication tasks to avoid conflicts with mavenCentral
+// Disable the default pluginMaven and marker publication tasks to avoid conflicts with mavenCentral.
+// The mavenCentral publication uses the same coordinates as the marker
+// (se.alipsa.gradle.maven-module:se.alipsa.gradle.maven-module.gradle.plugin),
+// so the jar is directly resolvable at the marker coordinates without a separate marker POM.
 afterEvaluate {
     tasks.withType(org.gradle.api.publish.maven.tasks.PublishToMavenLocal).configureEach { task ->
         if (task.name.contains('PluginMaven') || task.name.contains('PluginMarkerMaven')) {
@@ -123,7 +126,6 @@ afterEvaluate {
             task.enabled = false
         }
     }
-    // Also disable the signing tasks for pluginMaven and marker
     tasks.withType(org.gradle.plugins.signing.Sign).configureEach { task ->
         if (task.name.contains('PluginMaven') || task.name.contains('PluginMarkerMaven')) {
             task.enabled = false

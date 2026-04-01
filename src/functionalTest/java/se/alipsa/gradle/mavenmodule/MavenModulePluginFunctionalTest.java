@@ -420,6 +420,264 @@ class MavenModulePluginFunctionalTest {
     }
 
     @Test
+    void dependsOnPublishedSubprojectPublishesBeforeMavenBuild() throws IOException {
+        writeFile("settings.gradle", """
+                rootProject.name = 'test-root'
+                include 'lib'
+                """);
+
+        writeFile("build.gradle", """
+                plugins {
+                    id 'se.alipsa.gradle.maven-module'
+                }
+                mavenModules {
+                    app {
+                        dependsOnPublishedSubproject 'lib'
+                    }
+                }
+                """);
+
+        writeFile("lib/build.gradle", """
+                plugins {
+                    id 'java'
+                    id 'maven-publish'
+                }
+                group = 'com.example'
+                version = '1.0.0'
+                publishing {
+                    publications {
+                        maven(MavenPublication) {
+                            from components.java
+                        }
+                    }
+                }
+                """);
+
+        writeFile("lib/src/main/java/com/example/Lib.java", """
+                package com.example;
+                public class Lib {}
+                """);
+
+        BuildResult result = createRunner("assemble")
+                .build();
+
+        assertEquals(TaskOutcome.SUCCESS, result.task(":mavenAppPackage").getOutcome());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":lib:publishToMavenLocal").getOutcome());
+
+        // publishToMavenLocal must run before Maven build phases
+        String output = result.getOutput();
+        int publishPos = output.indexOf(":lib:publishToMavenLocal");
+        int mavenPackage = output.indexOf(":mavenAppPackage");
+        assertTrue(publishPos >= 0 && mavenPackage >= 0, "Both tasks should appear in output");
+        assertTrue(publishPos < mavenPackage,
+                "lib:publishToMavenLocal should run before mavenAppPackage");
+    }
+
+    @Test
+    void dependsOnAllPublishedSubprojectsPublishesAllBeforeMavenBuild() throws IOException {
+        writeFile("settings.gradle", """
+                rootProject.name = 'test-root'
+                include 'lib'
+                include 'core'
+                """);
+
+        writeFile("build.gradle", """
+                plugins {
+                    id 'se.alipsa.gradle.maven-module'
+                }
+                mavenModules {
+                    app {
+                        dependsOnAllPublishedSubprojects()
+                    }
+                }
+                """);
+
+        writeFile("lib/build.gradle", """
+                plugins {
+                    id 'java'
+                    id 'maven-publish'
+                }
+                group = 'com.example'
+                version = '1.0.0'
+                publishing {
+                    publications {
+                        maven(MavenPublication) {
+                            from components.java
+                        }
+                    }
+                }
+                """);
+
+        writeFile("lib/src/main/java/com/example/Lib.java", """
+                package com.example;
+                public class Lib {}
+                """);
+
+        writeFile("core/build.gradle", """
+                plugins {
+                    id 'java'
+                    id 'maven-publish'
+                }
+                group = 'com.example'
+                version = '1.0.0'
+                publishing {
+                    publications {
+                        maven(MavenPublication) {
+                            from components.java
+                        }
+                    }
+                }
+                """);
+
+        writeFile("core/src/main/java/com/example/Core.java", """
+                package com.example;
+                public class Core {}
+                """);
+
+        BuildResult result = createRunner("assemble")
+                .build();
+
+        assertEquals(TaskOutcome.SUCCESS, result.task(":mavenAppPackage").getOutcome());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":lib:publishToMavenLocal").getOutcome());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":core:publishToMavenLocal").getOutcome());
+
+        String output = result.getOutput();
+        int libPublish = output.indexOf(":lib:publishToMavenLocal");
+        int corePublish = output.indexOf(":core:publishToMavenLocal");
+        int mavenPackage = output.indexOf(":mavenAppPackage");
+        assertTrue(libPublish < mavenPackage,
+                "lib:publishToMavenLocal should run before mavenAppPackage");
+        assertTrue(corePublish < mavenPackage,
+                "core:publishToMavenLocal should run before mavenAppPackage");
+    }
+
+    @Test
+    void dependsOnAllPublishedSubprojectsExcludesNamedSubprojects() throws IOException {
+        writeFile("settings.gradle", """
+                rootProject.name = 'test-root'
+                include 'lib'
+                include 'examples'
+                """);
+
+        writeFile("build.gradle", """
+                plugins {
+                    id 'se.alipsa.gradle.maven-module'
+                }
+                mavenModules {
+                    app {
+                        dependsOnAllPublishedSubprojects {
+                            exclude 'examples'
+                        }
+                    }
+                }
+                """);
+
+        writeFile("lib/build.gradle", """
+                plugins {
+                    id 'java'
+                    id 'maven-publish'
+                }
+                group = 'com.example'
+                version = '1.0.0'
+                publishing {
+                    publications {
+                        maven(MavenPublication) {
+                            from components.java
+                        }
+                    }
+                }
+                """);
+
+        writeFile("lib/src/main/java/com/example/Lib.java", """
+                package com.example;
+                public class Lib {}
+                """);
+
+        writeFile("examples/build.gradle", """
+                plugins {
+                    id 'java'
+                }
+                """);
+
+        writeFile("examples/src/main/java/com/example/Example.java", """
+                package com.example;
+                public class Example {}
+                """);
+
+        BuildResult result = createRunner("assemble")
+                .build();
+
+        assertEquals(TaskOutcome.SUCCESS, result.task(":mavenAppPackage").getOutcome());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":lib:publishToMavenLocal").getOutcome());
+
+        // examples should NOT have publishToMavenLocal triggered
+        assertNull(result.task(":examples:publishToMavenLocal"));
+    }
+
+    @Test
+    void dependsOnAllPublishedSubprojectsExcludesGroup() throws IOException {
+        writeFile("settings.gradle", """
+                rootProject.name = 'test-root'
+                include 'lib'
+                include 'examples:demo'
+                """);
+
+        writeFile("build.gradle", """
+                plugins {
+                    id 'se.alipsa.gradle.maven-module'
+                }
+                mavenModules {
+                    app {
+                        dependsOnAllPublishedSubprojects {
+                            exclude group: 'examples'
+                        }
+                    }
+                }
+                """);
+
+        writeFile("lib/build.gradle", """
+                plugins {
+                    id 'java'
+                    id 'maven-publish'
+                }
+                group = 'com.example'
+                version = '1.0.0'
+                publishing {
+                    publications {
+                        maven(MavenPublication) {
+                            from components.java
+                        }
+                    }
+                }
+                """);
+
+        writeFile("lib/src/main/java/com/example/Lib.java", """
+                package com.example;
+                public class Lib {}
+                """);
+
+        writeFile("examples/demo/build.gradle", """
+                plugins {
+                    id 'java'
+                }
+                """);
+
+        writeFile("examples/demo/src/main/java/com/example/Demo.java", """
+                package com.example;
+                public class Demo {}
+                """);
+
+        BuildResult result = createRunner("assemble")
+                .build();
+
+        assertEquals(TaskOutcome.SUCCESS, result.task(":mavenAppPackage").getOutcome());
+        assertEquals(TaskOutcome.SUCCESS, result.task(":lib:publishToMavenLocal").getOutcome());
+
+        // examples:demo should NOT have publishToMavenLocal triggered
+        assertNull(result.task(":examples:demo:publishToMavenLocal"));
+    }
+
+    @Test
     void configurationCacheIsSupported() {
         // First run: stores the configuration cache entry
         BuildResult first = createRunner("--configuration-cache", "build")

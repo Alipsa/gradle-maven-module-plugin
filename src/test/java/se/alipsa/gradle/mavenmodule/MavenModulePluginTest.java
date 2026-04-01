@@ -273,6 +273,66 @@ class MavenModulePluginTest {
         assertEquals(List.of("integration-tests", "e2e"), module.getMustRunBeforeSubprojectNames());
     }
 
+    @Test
+    void dependsOnPublishedSubprojectStoresNames() {
+        Project project = createProjectWithModule("app");
+        MavenModule module = getModules(project).getByName("app");
+
+        module.dependsOnPublishedSubproject("lib", "core");
+
+        assertEquals(List.of("lib", "core"), module.getDependsOnPublishedSubprojectNames());
+    }
+
+    @Test
+    void dependsOnAllPublishedSubprojectsSetsFlag() {
+        Project project = createProjectWithModule("app");
+        MavenModule module = getModules(project).getByName("app");
+
+        module.dependsOnAllPublishedSubprojects();
+
+        assertTrue(module.isDependsOnAllPublishedSubprojects());
+    }
+
+    @Test
+    void dependsOnPublishedSubprojectDefaultsAreCorrect() {
+        Project project = createProjectWithModule("app");
+        MavenModule module = getModules(project).getByName("app");
+
+        assertFalse(module.isDependsOnAllPublishedSubprojects());
+        assertTrue(module.getDependsOnPublishedSubprojectNames().isEmpty());
+        assertTrue(module.getExcludedPublishedSubprojectNames().isEmpty());
+        assertTrue(module.getExcludedPublishedSubprojectGroups().isEmpty());
+    }
+
+    @Test
+    void dependsOnAllPublishedSubprojectsWithExcludesStoresExclusions() {
+        Project project = createProjectWithModule("app");
+        MavenModule module = getModules(project).getByName("app");
+
+        module.dependsOnAllPublishedSubprojects(spec -> {
+            spec.exclude("examples:candles");
+            spec.exclude("examples:demo");
+        });
+
+        assertTrue(module.isDependsOnAllPublishedSubprojects());
+        assertEquals(List.of("examples:candles", "examples:demo"),
+                module.getExcludedPublishedSubprojectNames());
+    }
+
+    @Test
+    void dependsOnAllPublishedSubprojectsWithGroupExcludeStoresGroup() {
+        Project project = createProjectWithModule("app");
+        MavenModule module = getModules(project).getByName("app");
+
+        module.dependsOnAllPublishedSubprojects(spec ->
+            spec.exclude(java.util.Map.of("group", "matrix-examples"))
+        );
+
+        assertTrue(module.isDependsOnAllPublishedSubprojects());
+        assertEquals(List.of("matrix-examples"),
+                module.getExcludedPublishedSubprojectGroups());
+    }
+
     private Project createProjectWithModule(String moduleName) {
         Project project = ProjectBuilder.builder()
                 .withProjectDir(projectDir)
