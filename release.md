@@ -1,6 +1,8 @@
 # gradle-maven-module-plugin release history
 
-## v0.2.0 - In progress
+## v0.2.1 - In progress
+
+## v0.2.0 - 2026-04-01
 - Changed maven central coordinates to se.alipsa.gradle.maven-module:se.alipsa.gradle.maven-module.gradle.plugin:version
 - Publish the plugin to Maven Central on every release in additional to Plugin Portal.
 - Added `dependsOnPublishedSubproject` and `dependsOnAllPublishedSubprojects()` to ensure Gradle subprojects' artifacts are published to the local Maven repository before Maven build phases run.
